@@ -104,7 +104,7 @@ std::string TcpSocketOperator::ErrorDesc(int _errcode) {
 
 std::string TcpSocketOperator::Identify(SOCKET _sock) const {
     char szmsg[64];
-    snprintf(szmsg, sizeof(szmsg), "%d@TCP", _sock);
+    snprintf(szmsg, sizeof(szmsg), "%llu@TCP", (unsigned long long)_sock);
 
     return std::string(szmsg);
 }

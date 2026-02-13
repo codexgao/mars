@@ -62,7 +62,7 @@ static const int kBanFailCount = 3;
 static const int kSuccessUpdateInterval = 10 * 1000;
 static const int kFailUpdateInterval = 10 * 1000;
 
-#define SET_BIT(SET, RECORDS) RECORDS = (((RECORDS) << 1) | (bool(SET)))
+#define SET_BIT(SET, RECORDS) RECORDS = (((RECORDS) << 1) | ((SET) ? 1ULL : 0ULL))
 
 static inline uint32_t CAL_BIT_COUNT(uint64_t RECORDS) {
     uint32_t COUNT = 0;

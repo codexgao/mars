@@ -10,6 +10,10 @@
 #include <stdio.h>
 #include <string.h>
 
+#ifdef WIN32
+#include <crtdbg.h>
+#endif
+
 #include "comm/compiler_util.h"
 #include "comm/xlogger/xloggerbase.h"
 
@@ -124,7 +128,7 @@ void __ASSERTV2(const char* _pfile,
 #endif
 
 #if defined(WIN32)  //&& (defined(DEBUG))
-        __assert(_pexpression, _pfile, _line);
+        _assert(_pexpression, _pfile, _line);
 #endif
     }
 }

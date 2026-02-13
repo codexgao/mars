@@ -13,8 +13,8 @@ SCRIPT_PATH = os.path.split(os.path.realpath(__file__))[0]
 BUILD_OUT_PATH = 'cmake_build/Windows'
 WIN_LIBS_INSTALL_PATH = BUILD_OUT_PATH + "/Windows.out/"
 WIN_RESULT_DIR = WIN_LIBS_INSTALL_PATH + 'win/'
-WIN_BUILD_CMD = 'cmake ../.. -G "Visual Studio 16 2019" -T v142 && cmake --build . --target install --config %s'
-WIN_GEN_PROJECT_CMD = 'cmake ../.. -G "Visual Studio 16 2019" -T v142'
+WIN_BUILD_CMD = 'cmake ../.. -G "Visual Studio 17 2022" -A x64 && cmake --build . --target install --config %s'
+WIN_GEN_PROJECT_CMD = 'cmake ../.. -G "Visual Studio 17 2022" -A x64'
 SSL_ARCH = 'x86'
 
 def build_windows(incremental:bool, tag='', config:str='', lib_exe_path:str = ""):
@@ -145,12 +145,12 @@ def main():
         incremental = args.incremental
 
     if "MSVC_BIN_HOST64_PATH" not in os.environ:
-        DEFAULT_MSVC_BIN_HOST64_PATH = "C:/Program Files (x86)\Microsoft Visual Studio/2019/Professional/VC/Tools/MSVC/14.29.30133/bin/Hostx64/"
+        DEFAULT_MSVC_BIN_HOST64_PATH = "C:/Program Files (x86)\\Microsoft Visual Studio/2019/Professional/VC/Tools/MSVC/14.29.30133/bin/Hostx64/"
         print("please set MSVC_BIN_HOST64_PATH in environ, something like ", DEFAULT_MSVC_BIN_HOST64_PATH)
         exit(-1)
     LIB_EXE_PATH: str = os.path.join(os.environ["MSVC_BIN_HOST64_PATH"], "x86", "lib.exe")
     if not "MSVC_TOOLS_PATH" in os.environ:
-        DEFAULT_MSVC_TOOLS_PATH = "C:/Program Files (x86)\Microsoft Visual Studio/2019/Professional/Common7/Tools"
+        DEFAULT_MSVC_TOOLS_PATH = "C:/Program Files (x86)\\Microsoft Visual Studio/2019/Professional/Common7/Tools"
         print("please set MSVC_TOOLS_PATH in environ, something like ", DEFAULT_MSVC_TOOLS_PATH)
         exit(-1)
     check_vs_env("\"" + os.path.join(os.environ["MSVC_TOOLS_PATH"], "VsDevCmd.bat") + "\"")

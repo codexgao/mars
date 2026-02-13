@@ -797,11 +797,11 @@ bool XloggerAppender::__OpenLogFile(const std::string& _log_dir) {
         char log[1024] = {0};
         snprintf(log,
                  sizeof(log),
-                 "[F][ last log file:%s from %s to %s, time_diff:%ld, tick_diff:%" PRIu64 "\n",
+                 "[F][ last log file:%s from %s to %s, time_diff:%lld, tick_diff:%" PRIu64 "\n",
                  last_file_path_,
                  last_time_str,
                  now_time_str,
-                 now_time - last_time_,
+                 (long long)(now_time - last_time_),
                  now_tick - last_tick_);
 
         AutoBuffer tmp_buff;

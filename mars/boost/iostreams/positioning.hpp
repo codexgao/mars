@@ -82,7 +82,7 @@ inline stream_offset position_to_offset(std::streampos pos) { return pos; }
 // Converts a std::fpos_t to a stream_offset
 inline stream_offset fpos_t_to_offset(std::fpos_t pos)
 {
-#  if defined(_POSIX_) || (_INTEGRAL_MAX_BITS >= 64) || defined(__IBMCPP__)
+#  if defined(_POSIX_) || (_INTEGRAL_MAX_BITS >= 64) || defined(__IBMCPP__) || (defined(_MSC_VER) && (_MSC_VER >= 1930))
     return pos;
 #  else
     return _FPOSOFF(pos);
@@ -92,20 +92,33 @@ inline stream_offset fpos_t_to_offset(std::fpos_t pos)
 // Extracts the member _Fpos from a std::fpos
 inline std::fpos_t streampos_to_fpos_t(std::streampos pos)
 {
-#  if defined (_CPPLIB_VER) || defined(__IBMCPP__)
+// Try to access the _Fpos member directly for VS2022+
+// Fallback to get_fpos_t() for older Dinkumware versions
+// Fallback to seekpos() for IBM compiler
+#  if defined(_MSC_VER) && (_MSC_VER >= 1930)
+    // For MSVC 2022+, directly cast to streamoff
+    return static_cast<std::fpos_t>(static_cast<std::streamoff>(pos));
+#  elif defined (_CPPLIB_VER)
+    return pos.get_fpos_t();
+#  elif defined (__IBMCPP__)
     return pos.seekpos();
 #  else
-    return pos.get_fpos_t();
+    return pos._Fpos;
 #  endif
 }
 
 inline stream_offset position_to_offset(std::streampos pos)
 {
+#  if defined(_MSC_VER) && (_MSC_VER >= 1930)
+    // For MSVC 2022+, simply cast to streamoff
+    return static_cast<stream_offset>(static_cast<std::streamoff>(pos));
+#  else
     return fpos_t_to_offset(streampos_to_fpos_t(pos)) +
         static_cast<stream_offset>(
             static_cast<std::streamoff>(pos) -
             _FPOSOFF(streampos_to_fpos_t(pos))
         );
+#  endif
 }
 
 # endif // # ifndef BOOST_IOSTREAMS_HAS_DINKUMWARE_FPOS 

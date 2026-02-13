@@ -1,5 +1,7 @@
 cmake_minimum_required (VERSION 3.6)
 
+project (mars)
+
 set(CMAKE_INSTALL_PREFIX "${CMAKE_BINARY_DIR}" CACHE PATH "Installation directory" FORCE)
 message(STATUS "CMAKE_INSTALL_PREFIX=${CMAKE_INSTALL_PREFIX}")
 
@@ -21,8 +23,6 @@ set(ZSTD_SOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/zstd")
 set(LIBRARY_DIR ${ZSTD_SOURCE_DIR}/lib)
 include(GNUInstallDirs)
 add_subdirectory(zstd/build/cmake/lib zstd)
-
-project (mars)
 
 include(comm/utils.cmake)
 

@@ -339,8 +339,8 @@ int getdefaultgateway(in_addr_t* addr) {
     DWORD gatewayValueType = REG_MULTI_SZ;
     int done = 0;
 
-    char networkCardsPath[] = "SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion\\NetworkCards";
-    char interfacesPath[] = "SYSTEM\\CurrentControlSet\\Services\\Tcpip\\Parameters\\Interfaces";
+    TCHAR networkCardsPath[] = TEXT("SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion\\NetworkCards");
+    TCHAR interfacesPath[] = TEXT("SYSTEM\\CurrentControlSet\\Services\\Tcpip\\Parameters\\Interfaces");
 
     // The windows registry lists its primary network devices in the following location:
     // HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows NT\CurrentVersion\NetworkCards
@@ -423,10 +423,10 @@ int getdefaultgateway(in_addr_t* addr) {
                 keyValueLength = MAX_VALUE_LENGTH;
                 if (ERROR_SUCCESS
                     == RegQueryValueEx(networkCardKey,    // Open registry key
-                                       "ServiceName",     // Name of key to query
+                                       TEXT("ServiceName"),     // Name of key to query
                                        NULL,              // Reserved - must be NULL
                                        &keyValueType,     // Receives value type
-                                       keyValue,          // Receives value
+                                       (LPBYTE)keyValue,          // Receives value
                                        &keyValueLength))  // Receives value length in bytes
                 {
                     // printf("keyValue: %s\n", keyValue);
@@ -435,10 +435,10 @@ int getdefaultgateway(in_addr_t* addr) {
                         gatewayValueLength = MAX_VALUE_LENGTH;
                         if (ERROR_SUCCESS
                             == RegQueryValueEx(interfaceKey,          // Open registry key
-                                               "DhcpDefaultGateway",  // Name of key to query
+                                               TEXT("DhcpDefaultGateway"),  // Name of key to query
                                                NULL,                  // Reserved - must be NULL
                                                &gatewayValueType,     // Receives value type
-                                               gatewayValue,          // Receives value
+                                               (LPBYTE)gatewayValue,          // Receives value
                                                &gatewayValueLength))  // Receives value length in bytes
                         {
                             // Check to make sure it's a string
@@ -459,7 +459,13 @@ int getdefaultgateway(in_addr_t* addr) {
     RegCloseKey(networkCardsKey);
 
     if (done) {
+#ifdef UNICODE
+        char gatewayValueA[MAX_VALUE_LENGTH];
+        WideCharToMultiByte(CP_ACP, 0, gatewayValue, -1, gatewayValueA, MAX_VALUE_LENGTH, NULL, NULL);
+        *addr = inet_addr(gatewayValueA);
+#else
         *addr = inet_addr(gatewayValue);
+#endif
         return 0;
     }
 

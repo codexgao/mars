@@ -74,9 +74,9 @@ class CacheSocketItem {
     }
     int CreateStream() {
         if (!createstream_func)
-            return INVALID_SOCKET;
+            return (int)INVALID_SOCKET;
         if (socket_fd == INVALID_SOCKET)
-            return INVALID_SOCKET;
+            return (int)INVALID_SOCKET;
         return createstream_func(socket_fd);
     }
     void ResetTimeout() {
