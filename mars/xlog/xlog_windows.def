@@ -1,0 +1,38 @@
+LIBRARY xlog
+EXPORTS
+    ; --- appender API (C++, mars::xlog namespace) ---
+    ?appender_open@xlog@mars@@YAXAEBUXLogConfig@12@@Z
+    ?appender_flush@xlog@mars@@YAXXZ
+    ?appender_flush_sync@xlog@mars@@YAXXZ
+    ?appender_close@xlog@mars@@YAXXZ
+    ?appender_setmode@xlog@mars@@YAXW4TAppenderMode@12@@Z
+    ?appender_set_console_log@xlog@mars@@YAX_N@Z
+    ?appender_set_max_file_size@xlog@mars@@YAX_K@Z
+    ?appender_set_max_alive_duration@xlog@mars@@YAXJ@Z
+    ?appender_oneshot_flush@xlog@mars@@YAXAEBUXLogConfig@12@PEAW4TFileIOAction@12@@Z
+
+    ; --- xlogger_interface API (C++, mars::xlog namespace) ---
+    ?NewXloggerInstance@xlog@mars@@YAPEAVXloggerCategory@comm@2@AEBUXLogConfig@12@W4TLogLevel@@@Z
+    ?ReleaseXloggerInstance@xlog@mars@@YAXPEBD@Z
+    ?XloggerWrite@xlog@mars@@YAX_KPEBUXLoggerInfo_t@@PEBD@Z
+    ?Flush@xlog@mars@@YAX_K_N@Z
+    ?FlushAll@xlog@mars@@YAX_N@Z
+
+    ; --- xloggerbase C API (extern "C", no mangling) ---
+    xlogger_pid
+    xlogger_tid
+    xlogger_maintid
+    xlogger_Level
+    xlogger_SetLevel
+    xlogger_IsEnabledFor
+    xlogger_SetAppender
+    xlogger_SetFilter
+    xlogger_GetFilter
+    xlogger_AssertP
+    xlogger_Assert
+    xlogger_VPrint
+    xlogger_Print
+    xlogger_Write
+
+    ; --- Windows POSIX compat (used by xlog_flutter.cpp directly) ---
+    gettimeofday

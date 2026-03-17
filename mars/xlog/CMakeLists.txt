@@ -72,6 +72,68 @@ endif()
 
 BuildWithUnitTest("${PROJECT_NAME}" "${SELF_SRC_FILES}")
 
+# ---------------------------------------------------------------------------
+# Windows DLL target (opt-in via -DXLOG_BUILD_SHARED=ON)
+# ---------------------------------------------------------------------------
+if(MSVC AND XLOG_BUILD_SHARED)
+    # Build source list without unittest files (gtest not available in DLL builds)
+    set(XLOG_SHARED_SRC_FILES ${SELF_SRC_FILES})
+    list(FILTER XLOG_SHARED_SRC_FILES EXCLUDE REGEX ".*_unittest\\.cc$")
 
-    
-    
+    add_library(xlog_shared SHARED ${XLOG_SHARED_SRC_FILES})
+
+    set_target_properties(xlog_shared PROPERTIES
+        OUTPUT_NAME "xlog"
+        PDB_NAME    "xlog"
+        WINDOWS_EXPORT_ALL_SYMBOLS OFF
+    )
+
+    # Use LINK_FLAGS to specify .def file (compatible with CMake 3.6+)
+    set_target_properties(xlog_shared PROPERTIES
+        LINK_FLAGS "/DEF:\"${CMAKE_CURRENT_SOURCE_DIR}/xlog_windows.def\""
+    )
+
+    target_include_directories(xlog_shared PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}
+        ${CMAKE_CURRENT_SOURCE_DIR}/src
+        ${CMAKE_CURRENT_SOURCE_DIR}/..
+        ${CMAKE_CURRENT_SOURCE_DIR}/../..
+        ${CMAKE_CURRENT_SOURCE_DIR}/../comm
+        ${CMAKE_CURRENT_SOURCE_DIR}/../comm/xlogger
+        ${CMAKE_CURRENT_SOURCE_DIR}/../comm/windows
+        ${CMAKE_CURRENT_SOURCE_DIR}/../comm/windows/zlib
+        ${CMAKE_CURRENT_SOURCE_DIR}/../crypt
+        ${CMAKE_CURRENT_SOURCE_DIR}/../crypt/micro-ecc-master
+        ${CMAKE_CURRENT_SOURCE_DIR}/../../..
+    )
+
+    # _LIB is injected globally by utils.cmake; remove it for the SHARED target
+    # (xlog/comm headers don't use _LIB, this is defensive)
+    get_target_property(_existing_defs xlog_shared COMPILE_DEFINITIONS)
+    if(_existing_defs)
+        list(REMOVE_ITEM _existing_defs "_LIB")
+        set_target_properties(xlog_shared PROPERTIES COMPILE_DEFINITIONS "${_existing_defs}")
+    endif()
+    target_compile_definitions(xlog_shared PRIVATE XLOG_BUILDING_DLL)
+
+    # Link: comm static lib + boost + zstd + openssl(x64) + windows system libs
+    target_link_libraries(xlog_shared PRIVATE
+        comm
+        mars-boost
+        libzstd_static
+        "${CMAKE_SOURCE_DIR}/openssl/openssl_lib_windows/x64/libcrypto.lib"
+        "${CMAKE_SOURCE_DIR}/openssl/openssl_lib_windows/x64/libssl.lib"
+        ws2_32 crypt32
+    )
+
+    install(TARGETS xlog_shared
+        RUNTIME DESTINATION ${SELF_LIBS_OUT}   # xlog.dll
+        ARCHIVE DESTINATION ${SELF_LIBS_OUT}   # xlog.lib (import lib)
+    )
+
+    # Install linker-output PDB (requires /Zi or /DEBUG in Release)
+    install(FILES "$<TARGET_PDB_FILE:xlog_shared>"
+        DESTINATION ${SELF_LIBS_OUT}
+        OPTIONAL
+    )
+endif()
