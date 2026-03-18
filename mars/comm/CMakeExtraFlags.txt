@@ -11,6 +11,11 @@ if(ANDROID)
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${SELF_EXTRA_FLAGS}")
     set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${SELF_EXTRA_FLAGS}")
 
+    if(CMAKE_BUILD_TYPE STREQUAL "Debug")
+        set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-error=sign-compare")
+        set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wno-error=sign-compare")
+    endif()
+
 
 
 elseif(APPLE)
