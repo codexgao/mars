@@ -118,3 +118,5 @@ mars/cmake-build-debug
 mars/openssl/include/openssl/*
 .claude/*.local.json
 mars/logs
+.claude/
+.vscode/
