@@ -294,7 +294,12 @@ def make_static_framework(src_lib, dst_framework, header_file_mappings, header_f
         shutil.rmtree(dst_framework)
 
     os.makedirs(dst_framework)
-    shutil.copy(src_lib, dst_framework)
+    
+    # iOS Framework 规范：二进制文件名必须与 framework 名称相同
+    # e.g., "MarsXlog.framework" -> binary name should be "MarsXlog"
+    framework_name = os.path.basename(dst_framework).replace('.framework', '')
+    final_lib_path = os.path.join(dst_framework, framework_name)
+    shutil.copy(src_lib, final_lib_path)
 
     framework_path = dst_framework + '/Headers'
     for (src, dst) in header_file_mappings.items():
