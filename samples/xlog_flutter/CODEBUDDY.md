@@ -42,9 +42,9 @@ xlog_flutter/
 | 平台    | 预编译库路径                                         |
 |---------|------------------------------------------------------|
 | Android | `android/libs/{Debug,Release}/{arch}/libmarsxlog.so` |
-| iOS     | `ios/libs/MarsXlog.xcframework`                      |
-| macOS   | `macos/libs/MarsXlog.xcframework`                    |
-| Windows | `windows/libs/x64/{Debug,Release}/xlog.{lib,dll}`   |
+| iOS     | `ios/libs/Release/MarsXlog.xcframework` (含内嵌 dSYM) |
+| macOS   | `macos/libs/Release/MarsXlog.xcframework` (含内嵌 dSYM) |
+| Windows | `windows/libs/x64/Release/xlog.{lib,dll}`           |
 | Linux   | `linux/libs/x64/libxlog.a`                          |
 
 ## 构建 Mars 原生库（从 mars/ 根目录执行）
@@ -53,11 +53,11 @@ xlog_flutter/
 # Android
 python build_android.py
 
-# iOS（输出 MarsXlog.xcframework）
-python build_ios.py --xlog
+# iOS（输出带 dSYM 的 MarsXlog.xcframework）
+python build_xlog_ios.py --config Release
 
-# macOS
-python build_osx.py --xlog
+# macOS（输出带 dSYM 的 MarsXlog.xcframework）
+python build_xlog_mac.py --config Release
 
 # Windows（xlog 仅）
 python build_windows.py --xlog --config Release
@@ -151,9 +151,18 @@ try {
 
 ## 平台集成要点
 
-- **iOS/macOS**: 最小平台版本分别为 iOS 12.0 / macOS 10.14；原生代码极少（仅 podspec + 一行 `#include`）
+- **iOS**: 最小平台版本 iOS 12.0；原生代码极少（仅 podspec + 一行 `#include`）
+  - **调试符号**：XCFramework 内嵌 dSYM，Xcode 自动加载符号；无需 podspec 额外配置
+
+- **macOS**: 最小平台版本 macOS 10.14；原生代码极少（仅 podspec + 一行 `#include`）
+  - **调试符号**：XCFramework 内嵌 dSYM，Xcode 自动加载符号；无需 podspec 额外配置
+
 - **Android**: minSdk=21，支持 arm64-v8a 和 armeabi-v7a
+  - **调试符号（Debug build）**：`libmarsxlog.so` 未 strip，Android Studio 自动识别，可直接设 native 断点
+  - **调试符号（Release build）**：`android/libs/Release/{arch}/libmarsxlog.so.sym` 需手动加载到 LLDB（Android Studio → Run Configurations → Debugger → Debug symbols directories）
+
 - **Windows**: 包含 `gettimeofday` POSIX 兼容垫片（`windows/src/sys/`）；需将 `xlog.dll` 一起分发
+  - **调试符号**：`xlog.pdb` 随 Flutter build 输出目录自动分发，Visual Studio 自动识别
 
 ## 多进程安全
 
