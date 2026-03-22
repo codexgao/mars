@@ -105,7 +105,9 @@ void FlushAll(bool _is_sync = false);
 
 ### Return type change
 
-Currently `NewXloggerInstance()` returns `mars::comm::XloggerCategory*`. It will be changed to return `uintptr_t` for consistency with all other instance-based APIs and to simplify cross-language interop (Java long, OC uint64_t).
+Currently `NewXloggerInstance()` returns `mars::comm::XloggerCategory*` and `GetXloggerInstance()` returns `mars::comm::XloggerCategory*`. Both will be changed to return `uintptr_t` for consistency with all other instance-based APIs and to simplify cross-language interop (Java long, OC uint64_t).
+
+Additionally, `NewXloggerInstance()` gains a default parameter `_level = kLevelInfo`. The existing signature has no default; this is a new convenience.
 
 ### New APIs
 
@@ -124,7 +126,9 @@ namespace xlog {
 // All marked __attribute__((deprecated))
 
 inline void appender_open(const XLogConfig& _config) {
-    NewXloggerInstance(_config, kLevelInfo);
+    XLogConfig default_config = _config;
+    default_config.nameprefix_ = "default";
+    NewXloggerInstance(default_config, kLevelInfo);
 }
 
 inline void appender_close() {
@@ -163,7 +167,7 @@ inline void appender_set_max_alive_duration(long _max_time) {
 }  // namespace mars
 ```
 
-These wrappers assume `nameprefix_ = "default"` in the XLogConfig passed to `appender_open()`. If the caller uses a different nameprefix, `appender_close()` will not find the instance. This is a known limitation of the compatibility layer; callers should migrate to the new API.
+The `appender_open()` wrapper forcibly sets `nameprefix_ = "default"` regardless of what the caller passes. This ensures `appender_close()` can always find the instance. Callers who need a custom nameprefix should migrate to `NewXloggerInstance()` directly.
 
 ## Internal Implementation Changes
 
@@ -184,15 +188,42 @@ These wrappers assume `nameprefix_ = "default"` in the XLogConfig passed to `app
 **Keep:**
 - `XloggerAppender` class and all its methods (Open, Close, Write, Flush, etc.)
 - `ConsoleLog()` function
+- `appender_set_console_fun()` (Apple platform only, operates on independent static `sg_console_fun`)
 - All file management logic (__Log2File, __OpenLogFile, etc.)
 - All buffer/compression logic
 - `g_log_write_callback` (optional extensibility hook)
+
+**Migrate to instance-based versions (new APIs in xlogger_interface.h):**
+- `appender_getfilepath_from_timespan()` -> `GetFilePathFromTimespan(uintptr_t _instance, int _timespan, ...)`
+- `appender_make_logfile_name()` -> `MakeLogFileName(uintptr_t _instance, ...)`
+- `appender_get_current_log_path()` -> `GetCurrentLogPath(uintptr_t _instance, ...)`
+- `appender_get_current_log_cache_path()` -> `GetCurrentLogCachePath(uintptr_t _instance, ...)`
+- `appender_oneshot_flush()` -> `OneshotFlush(uintptr_t _instance, ...)`
+- `xlogger_dump()` -> `XloggerDump(uintptr_t _instance, ...)`
+- `xlogger_memory_dump()` -> `XloggerMemoryDump(uintptr_t _instance, ...)`
+
+Deprecated wrappers for these functions will be provided in `appender.h`, forwarding to the "default" instance (same pattern as `appender_open()` wrapper).
 
 ### xlogger_interface.cc changes
 
 **Modify `NewXloggerInstance()`:**
 - Change return type from `XloggerCategory*` to `uintptr_t`
-- If `_instance_ptr == 0` in any API, no longer fall through to global `xlogger_*` functions. Instead return error / no-op.
+- Add default parameter `_level = kLevelInfo`
+- If `_instance_ptr == 0` in any API, no longer fall through to global `xlogger_*` functions. Instead look up "default" instance from the map (see `ResolveInstance` below).
+
+**Modify `GetXloggerInstance()`:**
+- Change return type from `XloggerCategory*` to `uintptr_t`
+
+**Modify `ReleaseXloggerInstance()`:**
+- Add `appender->Close()` call before `DelayRelease` to match `DestroyXlogInstance` behavior and ensure buffers are flushed before teardown.
+
+**Register global xlogger callback:**
+- When `NewXloggerInstance()` is called with `nameprefix_ == "default"`, it should also call `xlogger_SetAppender()` to register a global callback that forwards to the "default" instance's appender. This ensures that code using `xlogger2()` / `xlogger()` macros (which call `xlogger_Write()` -> global appender callback) continues to work.
+- When `ReleaseXloggerInstance("default")` is called, it should call `xlogger_SetAppender(nullptr)` to unregister the global callback.
+
+**Register process exit cleanup:**
+- Use `BOOT_RUN_EXIT` to register a global cleanup callback that calls `FlushAll(true)` followed by destroying all remaining instances. This replaces the old `appender_release_default_appender()` exit handler.
+- The exit handler is registered once on the first call to `NewXloggerInstance()`.
 
 **Add `DestroyXlogInstance(uintptr_t)`:**
 ```cpp
@@ -238,11 +269,19 @@ std::vector<std::string> GetAllXlogInstanceNames() {
 
 ```cpp
 void FlushAll(bool _is_sync) {
-    ScopedLock lock(GetGlobalMutex());
-    auto& xmap = GetGlobalInstanceMap();
-    for (auto it = xmap.begin(); it != xmap.end(); ++it) {
-        XloggerCategory* category = it->second;
-        XloggerAppender* appender = reinterpret_cast<XloggerAppender*>(category->GetAppender());
+    // Copy instance list under lock, then flush without holding global lock
+    // to avoid blocking NewXloggerInstance/DestroyXlogInstance during I/O.
+    std::vector<XloggerAppender*> appenders;
+    {
+        ScopedLock lock(GetGlobalMutex());
+        auto& xmap = GetGlobalInstanceMap();
+        for (auto it = xmap.begin(); it != xmap.end(); ++it) {
+            XloggerCategory* category = it->second;
+            appenders.push_back(
+                reinterpret_cast<XloggerAppender*>(category->GetAppender()));
+        }
+    }
+    for (auto* appender : appenders) {
         _is_sync ? appender->FlushSync() : appender->Flush();
     }
 }
@@ -258,8 +297,12 @@ Decision: When `_instance_ptr == 0`, look up the "default" instance from the map
 ```cpp
 static uintptr_t ResolveInstance(uintptr_t _instance_ptr) {
     if (0 != _instance_ptr) return _instance_ptr;
-    auto* cat = GetGlobalInstanceMap()["default"];  // may be nullptr
-    return reinterpret_cast<uintptr_t>(cat);
+    // Use find() to avoid inserting a nullptr entry into the map
+    auto it = GetGlobalInstanceMap().find("default");
+    if (it != GetGlobalInstanceMap().end()) {
+        return reinterpret_cast<uintptr_t>(it->second);
+    }
+    return 0;
 }
 ```
 
@@ -347,13 +390,13 @@ typedef NS_ENUM(NSInteger, MarsXLogLevel) {
 };
 
 typedef NS_ENUM(NSInteger, MarsXLogAppenderMode) {
-    MarsXLogAppenderModeSync = 1,
-    MarsXLogAppenderModeAsync = 2
+    MarsXLogAppenderModeAsync = 0,  // matches C++ kAppenderAsync
+    MarsXLogAppenderModeSync = 1    // matches C++ kAppenderSync
 };
 
 typedef NS_ENUM(NSInteger, MarsXLogCompressMode) {
-    MarsXLogCompressModeZlib = 1,
-    MarsXLogCompressModeZstd = 2
+    MarsXLogCompressModeZlib = 0,   // matches C++ kZlib
+    MarsXLogCompressModeZstd = 1    // matches C++ kZstd
 };
 
 @interface MarsXLogConfig : NSObject
@@ -389,6 +432,8 @@ typedef NS_ENUM(NSInteger, MarsXLogCompressMode) {
 + (void)flush:(uint64_t)instance isSync:(BOOL)isSync;
 + (void)flushAll:(BOOL)isSync;
 
++ (NSArray<NSString *> *)getAllXlogInstanceNames;
+
 @end
 ```
 
@@ -419,6 +464,7 @@ Add `MarsXlog.h` to `mars/xlog/export_include/` and update `mars_utils.py` XLOG_
 | `mars/xlog/objc/MarsXlog.mm` | **New file** | ~+150 |
 | `mars/xlog/CMakeLists.txt` | Modify: add MarsXlog.mm | ~+2 |
 | `mars/xlog/export_include/xlogger/MarsXlog.h` | **New file** (copy/symlink) | ~+1 |
+| `mars/mars_utils.py` | Modify: add MarsXlog.h to XLOG_COPY_HEADER_FILES | ~+1 |
 
 ## Error Handling
 
@@ -434,7 +480,23 @@ Add `MarsXlog.h` to `mars/xlog/export_include/` and update `mars_utils.py` XLOG_
 - Global instance map protected by `GetGlobalMutex()`.
 - Each `XloggerAppender` has its own `mutex_buffer_async_` and `mutex_log_file_`.
 - `DelayRelease` (5-second delay) prevents use-after-free from async threads.
+- `FlushAll()` copies instance list under lock, then flushes without holding global lock to avoid deadlock/blocking.
 - No changes to the existing thread safety model.
+
+## Process Exit Cleanup
+
+- A `BOOT_RUN_EXIT` callback is registered on the first call to `NewXloggerInstance()`.
+- On process exit, the callback calls `FlushAll(true)` to synchronously flush all instances, then iterates the map and closes/releases each instance.
+- This replaces the old `appender_release_default_appender()` exit handler.
+
+## Global xlogger Callback Chain
+
+- When the "default" instance is created via `NewXloggerInstance()`, a global xlogger appender callback is registered via `xlogger_SetAppender()`.
+- This callback forwards `xlogger_Write()` / `xlogger2()` macro calls to the "default" instance's `XloggerAppender::Write()`.
+- When the "default" instance is destroyed, `xlogger_SetAppender(nullptr)` is called to unregister.
+- Code that uses `xlogger2()` macros without an explicit instance will write to the "default" instance. If no "default" instance exists, logs are silently dropped.
+
+Note: `XloggerCategory::GetAppender()` returns `intptr_t` (signed). The cast to `XloggerAppender*` is safe because the stored value was originally a valid pointer. This matches the existing code pattern in `xlogger_interface.cc`.
 
 ## Testing Strategy
 
