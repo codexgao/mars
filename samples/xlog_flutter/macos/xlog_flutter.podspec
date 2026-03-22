@@ -25,20 +25,11 @@ Pod::Spec.new do |s|
   s.source_files = 'Classes/**/*'
 
   # ── Link against MarsXlog xcframework ────────────────────────────────────────
-  # Build with: cd mars/mars && python build_xlog_mac.py [--config Release|Debug]
-  # Expected: macos/libs/Release/MarsXlog.xcframework, macos/libs/Debug/MarsXlog.xcframework
-  # A build script keeps macos/libs/MarsXlog.xcframework symlink pointing to the right variant.
+  # Build with: cd mars && python build_xlog_mac.py --config Release
+  # Expected: macos/libs/Release/MarsXlog.xcframework (with embedded dSYMs)
+  # dSYMs are embedded in each XCFramework slice and auto-loaded by Xcode.
 
-  has_release = File.exist?(File.join(__dir__, 'libs/Release/MarsXlog.xcframework'))
-  has_debug   = File.exist?(File.join(__dir__, 'libs/Debug/MarsXlog.xcframework'))
-
-  if has_release || has_debug
-    # Pick one xcframework at pod-install time (Ruby runs here, not at build time).
-    # During pod install the CONFIGURATION variable is not available, so we
-    # prefer Debug when it exists (developer workflow), otherwise Release.
-    xcfw = has_debug ? 'libs/Debug/MarsXlog.xcframework' : 'libs/Release/MarsXlog.xcframework'
-    s.vendored_frameworks = xcfw
-  end
+  s.vendored_frameworks = 'libs/Release/MarsXlog.xcframework'
 
   s.libraries = 'z'
 
