@@ -43,34 +43,39 @@
 ## Task 1：简化 iOS podspec
 
 **Files:**
-- Modify: `samples/xlog_flutter/ios/xlog_flutter.podspec:33-42`
+- Modify: `samples/xlog_flutter/ios/xlog_flutter.podspec:28-42`
 
 - [ ] **Step 1: 阅读当前 podspec 确认要删除的行范围**
 
-  当前 `ios/xlog_flutter.podspec` 第 33–42 行是条件判断逻辑：
+  当前 `ios/xlog_flutter.podspec` 第 28–42 行是注释块 + 条件判断逻辑：
   ```ruby
+  # ── Link against MarsXlog xcframework ────────────────────────────────────────
+  # Build with: cd mars && python build_xlog_ios.py [--config Release|Debug]
+  # Expected: ios/libs/Release/MarsXlog.xcframework, ios/libs/Debug/MarsXlog.xcframework
+  # A build script keeps ios/libs/MarsXlog.xcframework symlink pointing to the right variant.
+
   has_release = File.exist?(File.join(__dir__, 'libs/Release/MarsXlog.xcframework'))
   has_debug   = File.exist?(File.join(__dir__, 'libs/Debug/MarsXlog.xcframework'))
 
   if has_release || has_debug
+    # Pick one xcframework at pod-install time (Ruby runs here, not at build time).
+    # During pod install the CONFIGURATION variable is not available, so we
+    # prefer Debug when it exists (developer workflow), otherwise Release.
     xcfw = has_debug ? 'libs/Debug/MarsXlog.xcframework' : 'libs/Release/MarsXlog.xcframework'
     s.vendored_frameworks = xcfw
   end
   ```
 
-- [ ] **Step 2: 替换为单行固定引用**
+- [ ] **Step 2: 替换为注释 + 单行固定引用**
 
-  将上述 8 行（含注释）替换为：
-  ```ruby
-  s.vendored_frameworks = 'libs/Release/MarsXlog.xcframework'
-  ```
-
-  同时将上方注释块（第 28–32 行）更新为：
+  将上述 15 行替换为：
   ```ruby
   # ── Link against MarsXlog xcframework ────────────────────────────────────────
-  # Build with: cd mars/mars && python build_xlog_ios.py [--config Release]
+  # Build with: cd mars && python build_xlog_ios.py --config Release
   # Expected: ios/libs/Release/MarsXlog.xcframework (with embedded dSYMs)
   # dSYMs are embedded in each XCFramework slice and auto-loaded by Xcode.
+
+  s.vendored_frameworks = 'libs/Release/MarsXlog.xcframework'
   ```
 
 - [ ] **Step 3: 验证 podspec 语法**
@@ -100,21 +105,18 @@
 ## Task 2：简化 macOS podspec
 
 **Files:**
-- Modify: `samples/xlog_flutter/macos/xlog_flutter.podspec:32-41`
+- Modify: `samples/xlog_flutter/macos/xlog_flutter.podspec:27-41`
 
-- [ ] **Step 1: 替换条件逻辑为单行**
+- [ ] **Step 1: 替换条件逻辑为注释 + 单行**
 
-  将 `macos/xlog_flutter.podspec` 第 32–41 行的条件判断替换为：
-  ```ruby
-  s.vendored_frameworks = 'libs/Release/MarsXlog.xcframework'
-  ```
-
-  更新上方注释（第 27–31 行）为：
+  将 `macos/xlog_flutter.podspec` 第 27–41 行的条件判断替换为：
   ```ruby
   # ── Link against MarsXlog xcframework ────────────────────────────────────────
-  # Build with: cd mars/mars && python build_xlog_mac.py [--config Release]
+  # Build with: cd mars && python build_xlog_mac.py --config Release
   # Expected: macos/libs/Release/MarsXlog.xcframework (with embedded dSYMs)
   # dSYMs are embedded in each XCFramework slice and auto-loaded by Xcode.
+
+  s.vendored_frameworks = 'libs/Release/MarsXlog.xcframework'
   ```
 
 - [ ] **Step 2: 验证语法**
@@ -161,13 +163,13 @@
 
 - [ ] **Step 2: 在 XLOG_DLL 定义之后、target_link_libraries 之前插入 XLOG_PDB**
 
-  在 `set(XLOG_DLL ...)` 行之后追加：
+  在 `set(XLOG_DLL ...)` 行（第 63–64 行）之后追加：
   ```cmake
   set(XLOG_PDB
-      "$<IF:$<CONFIG:Debug>,${LIB_DIR}/x64/Debug/xlog.pdb,${LIB_DIR}/x64/Release/xlog.pdb>")
+      "$<$<CONFIG:Debug>:${LIB_DIR}/x64/Debug/xlog.pdb>$<$<NOT:$<CONFIG:Debug>>:${LIB_DIR}/x64/Release/xlog.pdb>")
   ```
 
-  然后修改 `bundled_libraries` 块，在 `"${XLOG_DLL}"` 后追加 `"${XLOG_PDB}"`：
+  然后修改 `bundled_libraries` 块（第 70–74 行），在 `"${XLOG_DLL}"` 后追加 `"${XLOG_PDB}"`：
   ```cmake
   set(xlog_flutter_bundled_libraries
     $<TARGET_FILE:xlog_flutter>
@@ -177,28 +179,41 @@
   )
   ```
 
+  > **关键点**：使用与 XLOG_DLL 相同的嵌套 generator expression 语法 `$<$<CONFIG:Debug>:...>$<$<NOT:...>>:...>` 进行 Debug/Release 选择。
+
 - [ ] **Step 3: 同时更新注释，明确 .pdb 为必需文件**
 
-  将第 53–59 行注释中的 `(optional)` 改为必需：
+  将第 53–59 行注释中的 `(optional)` 改为必需，并为 Debug build 添加说明：
   ```cmake
-  #   copy cmake_build/Windows/Windows.out/win/xlog.pdb  -> windows/libs/x64/Release/xlog.pdb
+  #   cd mars && python build_xlog_windows.py --xlog --config Release
+  #   copy cmake_build/Windows/Windows.out/xlog.dll  -> windows/libs/x64/Release/xlog.dll
+  #   copy cmake_build/Windows/Windows.out/xlog.lib  -> windows/libs/x64/Release/xlog.lib
+  #   copy cmake_build/Windows/Windows.out/xlog.pdb  -> windows/libs/x64/Release/xlog.pdb
   #
-  #   cd mars && python build_windows.py --xlog --config Debug
-  #   copy cmake_build/Windows/Windows.out/win/xlog.dll  -> windows/libs/x64/Debug/xlog.dll
-  #   copy cmake_build/Windows/Windows.out/win/xlog.lib  -> windows/libs/x64/Debug/xlog.lib
-  #   copy cmake_build/Windows/Windows.out/win/xlog.pdb  -> windows/libs/x64/Debug/xlog.pdb
+  #   cd mars && python build_xlog_windows.py --xlog --config Debug
+  #   copy cmake_build/Windows/Windows.out/xlog.dll  -> windows/libs/x64/Debug/xlog.dll
+  #   copy cmake_build/Windows/Windows.out/xlog.lib  -> windows/libs/x64/Debug/xlog.lib
+  #   copy cmake_build/Windows/Windows.out/xlog.pdb  -> windows/libs/x64/Debug/xlog.pdb
   ```
 
-- [ ] **Step 4: Commit**
+- [ ] **Step 4: 验证 CMake 语法（无需编译，仅检查语法）**
+
+  ```bash
+  cd samples/xlog_flutter/windows
+  cmake --check-system-vars -P CMakeLists.txt 2>&1 | grep -i "error"
+  # 如无输出，则 CMake 语法正确
+  ```
+
+- [ ] **Step 5: Commit**
 
   ```bash
   git add windows/CMakeLists.txt
   git commit -m "feat(windows): bundle xlog.pdb with plugin for Debug and Release
 
-  Use CMake IF generator expression to select Debug/Release .pdb and include
-  it in bundled_libraries. This causes Flutter to copy xlog.pdb to the build
-  output dir alongside xlog.dll, enabling Visual Studio/WinDbg auto-loading
-  of symbols without manual configuration."
+  Use CMake generator expressions (same pattern as XLOG_DLL) to select
+  Debug/Release .pdb and include it in bundled_libraries. This causes
+  Flutter to copy xlog.pdb to the build output dir alongside xlog.dll,
+  enabling Visual Studio/WinDbg auto-loading of symbols without manual config."
   ```
 
 ---
@@ -537,57 +552,82 @@
 
 ---
 
-## Task 8：更新 Windows 构建脚本 — 生成 Debug .pdb
+## Task 8：验证 Windows 构建脚本 .pdb 处理
 
 **Files:**
-- Modify: `mars/build_xlog_windows.py` 或 `mars/build_windows.py`（确认哪个生成 xlog）
+- Verify: `mars/build_xlog_windows.py` (not mars/build_windows.py)
+
+> **重要：** build_xlog_windows.py 已在第 44 行声明 `DEPLOY_ARTIFACTS = ['xlog.dll', 'xlog.lib', 'xlog.pdb']`，且在第 137–147 行有部署逻辑。此任务是**验证现有行为是否正确**，而非新增功能。
 
 - [ ] **Step 1: 确认生成 xlog.dll 的脚本**
 
   ```bash
-  grep -l "xlog.dll\|xlog.lib\|xlog.pdb" mars/build_xlog_windows.py mars/build_windows.py 2>/dev/null
+  grep -n "DEPLOY_ARTIFACTS\|xlog.dll\|xlog.pdb" mars/build_xlog_windows.py | head -5
+  ```
+  
+  期望输出包含：
+  ```
+  44:DEPLOY_ARTIFACTS = ['xlog.dll', 'xlog.lib', 'xlog.pdb']
   ```
 
-- [ ] **Step 2: 确认 Debug 构建时 .pdb 生成配置**
+  > **结论**：build_xlog_windows.py 是正确的脚本。build_windows.py 是全量 Mars 构建脚本，与 xlog 独立构建无直接关系。
 
-  MSVC 在 CMake Debug 构建时默认会生成 `.pdb`（需要 `/Zi` 或 `/ZI` 编译选项，Debug 构建默认启用）。检查构建脚本是否已正确传递 `--config Debug`：
+- [ ] **Step 2: 检查部署逻辑是否处理 Debug .pdb**
 
   ```bash
-  grep -n "Debug\|pdb\|config" mars/build_xlog_windows.py | head -20
+  grep -A 10 -B 5 "Debug\|pdb" mars/build_xlog_windows.py | head -40
   ```
 
-- [ ] **Step 3: 确保 .pdb 被复制到插件目录**
-
-  确认 Debug 构建完成后，脚本将 `xlog.pdb` 复制到 `samples/xlog_flutter/windows/libs/x64/Debug/`。
-
-  若未复制，在脚本复制 Debug `xlog.dll`/`xlog.lib` 的逻辑附近追加：
+  查看是否有类似以下逻辑：
   ```python
-  # 复制 Debug pdb（供断点调试使用）
-  pdb_src = os.path.join(build_output_dir, 'xlog.pdb')
-  pdb_dst = os.path.join(plugin_debug_dir, 'xlog.pdb')
-  if os.path.exists(pdb_src):
-      shutil.copy2(pdb_src, pdb_dst)
-      logging.info('Copied xlog.pdb -> %s', pdb_dst)
-  else:
-      logging.warning('xlog.pdb not found at %s', pdb_src)
+  for config in ['Release', 'Debug']:
+      for artifact in DEPLOY_ARTIFACTS:
+          src = os.path.join(build_output, artifact)
+          dst = os.path.join(outdir, config, artifact)
+          if os.path.exists(src):
+              shutil.copy2(src, dst)
   ```
 
-- [ ] **Step 4: 语法检查**
+- [ ] **Step 3: 执行 Debug 构建测试**
 
   ```bash
-  python -m py_compile mars/build_xlog_windows.py && echo "Syntax OK"
+  cd mars/mars
+  python build_xlog_windows.py --config Debug --no-incremental
   ```
 
-- [ ] **Step 5: Commit**
+  检查输出：
+  ```bash
+  ls -la samples/xlog_flutter/windows/libs/x64/Debug/
+  # 应包含: xlog.dll, xlog.lib, xlog.pdb
+  ```
+
+  如果 `xlog.pdb` 缺失，则需补充部署逻辑（在脚本的部署阶段为 Debug config 复制 .pdb）。
+
+- [ ] **Step 4: 执行 Release 构建测试**
 
   ```bash
-  git add mars/build_xlog_windows.py  # 或 build_windows.py
-  git commit -m "feat(build): copy xlog.pdb for Debug Windows builds
-
-  Ensure xlog.pdb is copied to windows/libs/x64/Debug/ alongside
-  xlog.dll and xlog.lib. Combined with CMakeLists bundled_libraries
-  change, this enables Visual Studio auto-loading of symbols."
+  cd mars/mars
+  python build_xlog_windows.py --config Release --no-incremental
   ```
+
+  检查：
+  ```bash
+  ls -la samples/xlog_flutter/windows/libs/x64/Release/
+  # 应包含: xlog.dll, xlog.lib, xlog.pdb
+  ```
+
+- [ ] **Step 5: Commit（仅在发现缺陷需要修复时）**
+
+  如果 .pdb 未被部署，修改 `build_xlog_windows.py` 部署逻辑后：
+  ```bash
+  git add mars/build_xlog_windows.py
+  git commit -m "fix(build): ensure xlog.pdb deployed for both Debug and Release
+
+  Verify DEPLOY_ARTIFACTS handling in build_xlog_windows.py correctly
+  copies .pdb files to both windows/libs/x64/Debug/ and Release/ directories."
+  ```
+
+  如果 .pdb 已正确部署，则无需修改，跳过 Task 8 提交。
 
 ---
 
