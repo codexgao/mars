@@ -25,40 +25,19 @@
 #include <string>
 #include <vector>
 
+#include "xlog_config.h"
+
+// Cross-platform deprecated attribute macro
+#if defined(__GNUC__) || defined(__clang__)
+#define XLOG_DEPRECATED __attribute__((deprecated("Use xlogger_interface.h multi-instance API instead")))
+#elif defined(_MSC_VER)
+#define XLOG_DEPRECATED __declspec(deprecated("Use xlogger_interface.h multi-instance API instead"))
+#else
+#define XLOG_DEPRECATED
+#endif
+
 namespace mars {
 namespace xlog {
-
-enum TAppenderMode {
-    kAppenderAsync,
-    kAppenderSync,
-};
-
-enum TCompressMode {
-    kZlib,
-    kZstd,
-};
-
-enum TFileIOAction {
-    kActionNone = 0,
-    kActionSuccess = 1,
-    kActionUnnecessary = 2,
-    kActionOpenFailed = 3,
-    kActionReadFailed = 4,
-    kActionWriteFailed = 5,
-    kActionCloseFailed = 6,
-    kActionRemoveFailed = 7,
-};
-
-struct XLogConfig {
-    TAppenderMode mode_ = kAppenderAsync;
-    std::string logdir_;
-    std::string nameprefix_;
-    std::string pub_key_;
-    TCompressMode compress_mode_ = kZlib;
-    int compress_level_ = 6;
-    std::string cachedir_;
-    int cache_days_ = 0;
-};
 
 #ifdef __APPLE__
 enum TConsoleFun {
@@ -66,38 +45,113 @@ enum TConsoleFun {
     kConsoleNSLog,
     kConsoleOSLog,
 };
-#endif
 
-void appender_open(const XLogConfig& _config);
-
-void appender_flush();
-void appender_flush_sync();
-void appender_close();
-void appender_setmode(TAppenderMode _mode);
-bool appender_getfilepath_from_timespan(int _timespan, const char* _prefix, std::vector<std::string>& _filepath_vec);
-bool appender_make_logfile_name(int _timespan, const char* _prefix, std::vector<std::string>& _filepath_vec);
-bool appender_get_current_log_path(char* _log_path, unsigned int _len);
-bool appender_get_current_log_cache_path(char* _logPath, unsigned int _len);
-void appender_set_console_log(bool _is_open);
-
-#ifdef __APPLE__
 void appender_set_console_fun(TConsoleFun _fun);
 #endif
-/*
- * By default, all logs will write to one file everyday. You can split logs to multi-file by changing max_file_size.
- *
- * @param _max_byte_size    Max byte size of single log file, default is 0, meaning do not split.
- */
-void appender_set_max_file_size(uint64_t _max_byte_size);
-
-/*
- * By default, all logs lives 10 days at most.
- *
- * @param _max_time    Max alive duration of a single log file in seconds, default is 10 days
- */
-void appender_set_max_alive_duration(long _max_time);
 
 void appender_oneshot_flush(const XLogConfig& _config, TFileIOAction* _result);
+
+}  // namespace xlog
+}  // namespace mars
+
+// Include xlogger_interface.h for deprecated wrappers to call the new API.
+// This must come after the mars::xlog namespace block above to avoid circular issues.
+#include "xlogger_interface.h"
+
+namespace mars {
+namespace xlog {
+
+// ============================================================================
+// Deprecated compatibility wrappers
+// All below forward to the multi-instance API via the "default" instance.
+// Callers should migrate to NewXloggerInstance() / xlogger_interface.h API.
+// ============================================================================
+
+XLOG_DEPRECATED
+inline void appender_open(const XLogConfig& _config) {
+    XLogConfig default_config = _config;
+    default_config.nameprefix_ = "default";
+    NewXloggerInstance(default_config, kLevelInfo);
+}
+
+XLOG_DEPRECATED
+inline void appender_close() {
+    ReleaseXloggerInstance("default");
+}
+
+XLOG_DEPRECATED
+inline void appender_flush() {
+    FlushAll(false);
+}
+
+XLOG_DEPRECATED
+inline void appender_flush_sync() {
+    FlushAll(true);
+}
+
+XLOG_DEPRECATED
+inline void appender_setmode(TAppenderMode _mode) {
+    uintptr_t inst = GetXloggerInstance("default");
+    if (inst)
+        SetAppenderMode(inst, _mode);
+}
+
+XLOG_DEPRECATED
+inline bool appender_get_current_log_path(char* _log_path, unsigned int _len) {
+    uintptr_t inst = GetXloggerInstance("default");
+    if (inst)
+        return GetCurrentLogPath(inst, _log_path, _len);
+    return false;
+}
+
+XLOG_DEPRECATED
+inline bool appender_get_current_log_cache_path(char* _logPath, unsigned int _len) {
+    uintptr_t inst = GetXloggerInstance("default");
+    if (inst)
+        return GetCurrentLogCachePath(inst, _logPath, _len);
+    return false;
+}
+
+XLOG_DEPRECATED
+inline void appender_set_console_log(bool _is_open) {
+    uintptr_t inst = GetXloggerInstance("default");
+    if (inst)
+        SetConsoleLogOpen(inst, _is_open);
+}
+
+XLOG_DEPRECATED
+inline void appender_set_max_file_size(uint64_t _max_byte_size) {
+    uintptr_t inst = GetXloggerInstance("default");
+    if (inst)
+        SetMaxFileSize(inst, _max_byte_size);
+}
+
+XLOG_DEPRECATED
+inline void appender_set_max_alive_duration(long _max_time) {
+    uintptr_t inst = GetXloggerInstance("default");
+    if (inst)
+        SetMaxAliveTime(inst, _max_time);
+}
+
+XLOG_DEPRECATED
+inline bool appender_getfilepath_from_timespan(int _timespan,
+                                               const char* _prefix,
+                                               std::vector<std::string>& _filepath_vec) {
+    uintptr_t inst = GetXloggerInstance("default");
+    if (inst)
+        return GetFilePathFromTimespan(inst, _timespan, _prefix, _filepath_vec);
+    return false;
+}
+
+XLOG_DEPRECATED
+inline bool appender_make_logfile_name(int _timespan,
+                                       const char* _prefix,
+                                       std::vector<std::string>& _filepath_vec) {
+    uintptr_t inst = GetXloggerInstance("default");
+    if (inst)
+        return MakeLogFileName(inst, _timespan, _prefix, _filepath_vec);
+    return false;
+}
 
 }  // namespace xlog
 }  // namespace mars

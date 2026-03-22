@@ -22,25 +22,26 @@
 
 #include <stdint.h>
 
-#include "appender.h"
+#include <string>
+#include <vector>
+
+#include "xlog_config.h"
 #include "xloggerbase.h"
-
-namespace mars {
-namespace comm {
-
-class XloggerCategory;
-
-}
-}  // namespace mars
 
 namespace mars {
 namespace xlog {
 
-mars::comm::XloggerCategory* NewXloggerInstance(const XLogConfig& _config, TLogLevel _level);
+uintptr_t NewXloggerInstance(const XLogConfig& _config, TLogLevel _level = kLevelInfo);
 
-mars::comm::XloggerCategory* GetXloggerInstance(const char* _nameprefix);
+uintptr_t GetXloggerInstance(const char* _nameprefix);
 
 void ReleaseXloggerInstance(const char* _nameprefix);
+
+void DestroyXlogInstance(uintptr_t _instance);
+
+bool HasXlogInstance(const char* _nameprefix);
+
+std::vector<std::string> GetAllXlogInstanceNames();
 
 void XloggerWrite(uintptr_t _instance_ptr, const XLoggerInfo* _info, const char* _log);
 
@@ -61,6 +62,20 @@ void SetConsoleLogOpen(uintptr_t _instance_ptr, bool _is_open);
 void SetMaxFileSize(uintptr_t _instance_ptr, long _max_file_size);
 
 void SetMaxAliveTime(uintptr_t _instance_ptr, long _alive_seconds);
+
+bool GetFilePathFromTimespan(uintptr_t _instance_ptr,
+                             int _timespan,
+                             const char* _prefix,
+                             std::vector<std::string>& _filepath_vec);
+
+bool MakeLogFileName(uintptr_t _instance_ptr,
+                     int _timespan,
+                     const char* _prefix,
+                     std::vector<std::string>& _filepath_vec);
+
+bool GetCurrentLogPath(uintptr_t _instance_ptr, char* _log_path, unsigned int _len);
+
+bool GetCurrentLogCachePath(uintptr_t _instance_ptr, char* _log_path, unsigned int _len);
 
 }  // namespace xlog
 }  // namespace mars
