@@ -51,24 +51,28 @@ target_compile_definitions(xlog_flutter PUBLIC DART_SHARED_LIB)
 #   cd mars && python build_windows.py --xlog --config Release
 #   copy cmake_build/Windows/Windows.out/win/xlog.dll  -> windows/libs/x64/Release/xlog.dll
 #   copy cmake_build/Windows/Windows.out/win/xlog.lib  -> windows/libs/x64/Release/xlog.lib
-#   copy cmake_build/Windows/Windows.out/win/xlog.pdb  -> windows/libs/x64/Release/xlog.pdb  (optional)
+#   copy cmake_build/Windows/Windows.out/win/xlog.pdb  -> windows/libs/x64/Release/xlog.pdb
 #
 #   cd mars && python build_windows.py --xlog --config Debug
 #   copy cmake_build/Windows/Windows.out/win/xlog.dll  -> windows/libs/x64/Debug/xlog.dll
 #   copy cmake_build/Windows/Windows.out/win/xlog.lib  -> windows/libs/x64/Debug/xlog.lib
-#   copy cmake_build/Windows/Windows.out/win/xlog.pdb  -> windows/libs/x64/Debug/xlog.pdb  (optional)
+#   copy cmake_build/Windows/Windows.out/win/xlog.pdb  -> windows/libs/x64/Debug/xlog.pdb
 
 set(XLOG_IMPORT_LIB
     "$<$<CONFIG:Debug>:${LIB_DIR}/x64/Debug/xlog.lib>$<$<NOT:$<CONFIG:Debug>>:${LIB_DIR}/x64/Release/xlog.lib>")
 set(XLOG_DLL
     "$<$<CONFIG:Debug>:${LIB_DIR}/x64/Debug/xlog.dll>$<$<NOT:$<CONFIG:Debug>>:${LIB_DIR}/x64/Release/xlog.dll>")
+set(XLOG_PDB
+    "$<$<CONFIG:Debug>:${LIB_DIR}/x64/Debug/xlog.pdb>$<$<NOT:$<CONFIG:Debug>>:${LIB_DIR}/x64/Release/xlog.pdb>")
 
 target_link_libraries(xlog_flutter PRIVATE "${XLOG_IMPORT_LIB}")
 
 # List of absolute paths to libraries that should be bundled with the plugin.
 # xlog.dll must be shipped alongside xlog_flutter.dll so the loader can find it.
+# xlog.pdb (debug symbols) must be shipped alongside xlog.dll for VS/WinDbg auto-loading.
 set(xlog_flutter_bundled_libraries
   $<TARGET_FILE:xlog_flutter>
   "${XLOG_DLL}"
+  "${XLOG_PDB}"
   PARENT_SCOPE
 )
