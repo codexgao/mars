@@ -15,9 +15,13 @@ Defaults:
 Output:
     <outdir>/Release/MarsXlog.xcframework   (or Debug/)
       ├── ios-arm64/                      (device slice)
-      │   └── MarsXlog.framework/
+      │   ├── MarsXlog.framework/
+      │   └── dSYMs/                      (Release only: embedded debug symbols)
+      │       └── MarsXlog.framework.dSYM/
       └── ios-arm64_x86_64-simulator/     (simulator slice)
-          └── MarsXlog.framework/
+          ├── MarsXlog.framework/
+          └── dSYMs/                      (Release only: embedded debug symbols)
+              └── MarsXlog.framework.dSYM/
 
 Log file:
     <logdir>/build_xlog_ios_<timestamp>.log
@@ -273,6 +277,74 @@ def _create_xcframework(os_framework: str, sim_framework: str, output_dir: str) 
     return True
 
 
+def _find_dsym(build_out_path: str, platform_label: str) -> Optional[str]:
+    """Search for .dSYM bundle produced by xcodebuild in the build output directory.
+
+    xcodebuild produces MarsXlog.framework.dSYM alongside the .framework when
+    DEBUG_INFORMATION_FORMAT=dwarf-with-dsym is set (the default for Release).
+    We search recursively under build_out_path to find it.
+    """
+    import glob as _glob
+    pattern = os.path.join(build_out_path, '**', 'MarsXlog.framework.dSYM')
+    matches = _glob.glob(pattern, recursive=True)
+    if matches:
+        log.info('[dSYM] Found for %s: %s', platform_label, matches[0])
+        return matches[0]
+    log.warning('[dSYM] Not found for %s under %s', platform_label, build_out_path)
+    return None
+
+
+def _embed_dsyms(xcframework_path: str, build_out_path: str) -> bool:
+    """Embed dSYM bundles into the XCFramework slices.
+
+    Apple's XCFramework format supports embedded dSYMs at:
+        <xcframework>/<slice>/dSYMs/<name>.framework.dSYM/
+
+    Xcode and CocoaPods automatically discover dSYMs in this location,
+    enabling consumers to see MarsXlog symbols in crash reports and the debugger.
+
+    Parameters
+    ----------
+    xcframework_path : str
+        Path to the assembled MarsXlog.xcframework
+    build_out_path : str
+        CMake build root (e.g. cmake_build/iOS/Release) — searched recursively for dSYMs
+
+    Returns
+    -------
+    True if at least one dSYM was embedded; False if none found (non-fatal warning).
+    """
+    # Map XCFramework slice directory names to platform labels used in log messages
+    slice_labels = {
+        'ios-arm64':                  'OS',
+        'ios-arm64_x86_64-simulator': 'SIMULATOR',
+    }
+
+    embedded_any = False
+    for slice_dir_name, platform_label in slice_labels.items():
+        slice_path = os.path.join(xcframework_path, slice_dir_name)
+        if not os.path.isdir(slice_path):
+            log.warning('[dSYM] Slice directory not found: %s', slice_path)
+            continue
+
+        dsym_src = _find_dsym(build_out_path, platform_label)
+        if dsym_src is None:
+            continue
+
+        dsym_dst_dir = os.path.join(slice_path, 'dSYMs')
+        dsym_dst = os.path.join(dsym_dst_dir, 'MarsXlog.framework.dSYM')
+
+        os.makedirs(dsym_dst_dir, exist_ok=True)
+        if os.path.exists(dsym_dst):
+            shutil.rmtree(dsym_dst)
+
+        shutil.copytree(dsym_src, dsym_dst)
+        log.info('[dSYM] Embedded: %s -> %s', dsym_src, dsym_dst)
+        embedded_any = True
+
+    return embedded_any
+
+
 # ---------------------------------------------------------------------------
 # Core build function
 # ---------------------------------------------------------------------------
@@ -344,6 +416,14 @@ def build_xlog_ios(config: str, outdir: str, incremental: bool) -> bool:
 
     if not _create_xcframework(os_fw_path, sim_fw_path, config_outdir):
         return False
+
+    # ------------------------------------------------------------------ Embed dSYMs (Release only)
+    if config == 'Release':
+        xcframework_path = os.path.join(config_outdir, XCFRAMEWORK_NAME)
+        if not _embed_dsyms(xcframework_path, build_out_path):
+            log.warning('No dSYMs embedded — consumers will have limited native debug info')
+        else:
+            log.info('dSYMs embedded successfully into XCFramework')
 
     xcframework_path = os.path.join(config_outdir, XCFRAMEWORK_NAME)
     elapsed = int(time.time() - before_time)
