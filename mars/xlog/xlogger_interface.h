@@ -26,7 +26,7 @@
 #include <vector>
 
 #include "xlog_config.h"
-#include "xloggerbase.h"
+#include "mars/comm/xlogger/xloggerbase.h"
 
 namespace mars {
 namespace xlog {
