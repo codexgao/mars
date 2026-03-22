@@ -5,8 +5,12 @@ import glob
 import time
 import shutil
 import platform
+import subprocess
+import logging
 
 from mars_utils import *
+
+log = logging.getLogger(__name__)
 
 
 SCRIPT_PATH = os.path.split(os.path.realpath(__file__))[0]
@@ -74,6 +78,79 @@ def get_android_strip_cmd(arch):
     return strip_cmd
 
 
+def _find_llvm_tool(tool_name: str, ndk_root: str) -> str:
+    """Locate an LLVM tool (llvm-objcopy, llvm-strip) in the NDK toolchain.
+
+    NDK r21+ ships LLVM tools under:
+        <ndk_root>/toolchains/llvm/prebuilt/<host>/bin/<tool_name>
+    where <host> is e.g. linux-x86_64 or darwin-x86_64.
+    On Windows the binary has a .exe extension.
+    """
+    pattern = os.path.join(
+        ndk_root, 'toolchains', 'llvm', 'prebuilt', '*', 'bin', tool_name
+    )
+    matches = glob.glob(pattern)
+    # Also try with .exe suffix on Windows
+    if not matches:
+        matches = glob.glob(pattern + '.exe')
+    if matches:
+        return matches[0]
+    return ''
+
+
+def _extract_sym(so_path: str, sym_path: str, ndk_root: str) -> bool:
+    """Extract debug symbols from .so into a separate .so.sym file.
+
+    Uses ``llvm-objcopy --only-keep-debug`` to produce a symbols-only binary.
+    The original .so is then stripped in-place with ``llvm-strip --strip-all``.
+
+    Parameters
+    ----------
+    so_path :
+        Path to the full (unstripped) .so file.
+    sym_path :
+        Output path for the extracted symbols file (.so.sym).
+    ndk_root :
+        NDK root directory (e.g. the value of $ANDROID_NDK_HOME).
+
+    Returns
+    -------
+    True if symbol extraction succeeded; False on any error (non-fatal).
+    """
+    llvm_objcopy = _find_llvm_tool('llvm-objcopy', ndk_root)
+    if not llvm_objcopy:
+        log.warning('[sym] llvm-objcopy not found in NDK: %s', ndk_root)
+        return False
+
+    llvm_strip = _find_llvm_tool('llvm-strip', ndk_root)
+    if not llvm_strip:
+        # Fall back to replacing 'objcopy' with 'strip' in the path
+        llvm_strip = llvm_objcopy.replace('llvm-objcopy', 'llvm-strip')
+
+    # Step 1 — extract debug symbols into .so.sym
+    result = subprocess.run(
+        [llvm_objcopy, '--only-keep-debug', so_path, sym_path],
+        capture_output=True, text=True,
+    )
+    if result.returncode != 0:
+        log.warning('[sym] llvm-objcopy failed for %s: %s', so_path, result.stderr.strip())
+        return False
+    log.info('[sym] Extracted symbols: %s', sym_path)
+
+    # Step 2 — strip the original .so in-place
+    result = subprocess.run(
+        [llvm_strip, '--strip-all', so_path],
+        capture_output=True, text=True,
+    )
+    if result.returncode != 0:
+        log.warning('[sym] llvm-strip failed for %s: %s', so_path, result.stderr.strip())
+        # Non-fatal: symbol extraction succeeded, stripped .so not critical here
+    else:
+        log.info('[sym] Stripped: %s', so_path)
+
+    return True
+
+
 def build_android(incremental, arch, target_option='', config='Release'):
 
     before_time = time.time()
@@ -126,11 +203,28 @@ def build_android(incremental, arch, target_option='', config='Release'):
     shutil.copy(ANDROID_STL_FILE[arch], lib_path)
 
 
-    # strip only for Release; keep debug symbols for Debug builds
+    # For Release builds: extract debug symbols into .so.sym, then strip the .so.
+    # We prefer the modern LLVM tools (NDK r21+) over the legacy GCC strip.
+    # For Debug builds: keep full debug symbols for direct Android Studio debugging.
     if config == 'Release':
-        strip_cmd = get_android_strip_cmd(arch)
-        for f in glob.glob('%s/*.so' %(lib_path)):
-            os.system('%s %s' %(strip_cmd, f))
+        ndk_root = NDK_ROOT or os.environ.get('ANDROID_NDK_HOME', '')
+        use_llvm = bool(ndk_root and _find_llvm_tool('llvm-objcopy', ndk_root))
+
+        for f in glob.glob('%s/*.so' % lib_path):
+            if use_llvm:
+                sym_file = f + '.sym'
+                ok = _extract_sym(f, sym_file, ndk_root)
+                if ok:
+                    size_kb = os.path.getsize(sym_file) // 1024
+                    print('  Symbol file: %s  (%d KB)' % (sym_file, size_kb))
+                else:
+                    # Fall back to legacy GCC strip if LLVM extraction failed
+                    strip_cmd = get_android_strip_cmd(arch)
+                    os.system('%s %s' % (strip_cmd, f))
+            else:
+                # Legacy NDK or NDK_ROOT not set — use old GCC strip toolchain
+                strip_cmd = get_android_strip_cmd(arch)
+                os.system('%s %s' % (strip_cmd, f))
 
     print('==================Output========================')
     print('libs(%s): %s' %(config.lower(), lib_path))
