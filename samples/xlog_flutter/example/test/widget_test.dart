@@ -1,30 +1,23 @@
-// This is a basic Flutter widget test.
-//
-// To perform an interaction with a widget in your test, use the WidgetTester
-// utility in the flutter_test package. For example, you can send tap and scroll
-// gestures. You can also use WidgetTester to find child widgets in the widget
-// tree, read text, and verify that the values of widget properties are correct.
+// Basic smoke test for the xlog_flutter example app.
 
-import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:example/main.dart';
+import 'package:xlog_flutter_example/main.dart';
 
 void main() {
-  testWidgets('Counter increments smoke test', (WidgetTester tester) async {
-    // Build our app and trigger a frame.
+  testWidgets('xlog_flutter demo smoke test', (WidgetTester tester) async {
     await tester.pumpWidget(const MyApp());
 
-    // Verify that our counter starts at 0.
-    expect(find.text('0'), findsOneWidget);
-    expect(find.text('1'), findsNothing);
+    // App bar title should be visible
+    expect(find.text('xlog_flutter Demo'), findsOneWidget);
 
-    // Tap the '+' icon and trigger a frame.
-    await tester.tap(find.byIcon(Icons.add));
-    await tester.pump();
+    // All control buttons should be present
+    expect(find.text('Open XLog'), findsOneWidget);
+    expect(find.text('Write Logs'), findsOneWidget);
+    expect(find.text('Flush Sync'), findsOneWidget);
+    expect(find.text('Close XLog'), findsOneWidget);
 
-    // Verify that our counter has incremented.
-    expect(find.text('0'), findsNothing);
-    expect(find.text('1'), findsOneWidget);
+    // Initial status text should be shown
+    expect(find.text('Not initialized'), findsOneWidget);
   });
 }
