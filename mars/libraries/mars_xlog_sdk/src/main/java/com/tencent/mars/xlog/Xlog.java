@@ -50,6 +50,7 @@ public class Xlog implements Log.LogImp {
 		public int cachedays = 0;
 	}
 
+    @Deprecated
     public static void open(boolean isLoadLib, int level, int mode, String cacheDir, String logDir, String nameprefix, String pubkey) {
 		if (isLoadLib) {
 			System.loadLibrary("c++_shared");
@@ -104,6 +105,7 @@ public class Xlog implements Log.LogImp {
 	}
 
 
+	@Deprecated
 	@Override
 	public void appenderOpen(int level, int mode, String cacheDir, String logDir, String nameprefix, int cacheDays) {
 
@@ -156,12 +158,16 @@ public class Xlog implements Log.LogImp {
 	public native void releaseXlogInstance(String nameprefix);
 
 	public native long newXlogInstance(XLogConfig logConfig);
+	public native void destroyXlogInstance(long logInstancePtr);
+	public native boolean hasXlogInstance(String nameprefix);
 
 	@Override
 	public native void setConsoleLogOpen(long logInstancePtr, boolean isOpen);	//set whether the console prints log
 
+	@Deprecated
 	private static native void appenderOpen(XLogConfig logConfig);
 
+	@Deprecated
 	@Override
 	public native void appenderClose();
 

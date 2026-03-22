@@ -1316,3 +1316,9 @@ const char* xlogger_memory_dump(const void* _dumpbuffer, size_t _len) {
     delete[] dst_buffer;
     return buffer.c_str();
 }
+
+// Implement xlogger_dump as a wrapper to xlogger_memory_dump for backwards compatibility
+// and to avoid linker issues on Windows (where WEAK_FUNC is not available)
+const char* xlogger_dump(const void* _dumpbuffer, size_t _len) {
+    return xlogger_memory_dump(_dumpbuffer, _len);
+}

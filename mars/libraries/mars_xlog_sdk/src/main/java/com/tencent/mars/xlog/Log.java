@@ -64,6 +64,9 @@ public class Log {
 
         void setMaxAliveTime(long logInstancePtr, long aliveSeconds);
 
+        void destroyXlogInstance(long logInstancePtr);
+        boolean hasXlogInstance(String nameprefix);
+
     }
 
     private static LogImp debugLog = new LogImp() {
@@ -175,6 +178,15 @@ public class Log {
         @Override
         public void setMaxFileSize(long logInstancePtr, long aliveSeconds) {
 
+        }
+
+        @Override
+        public void destroyXlogInstance(long logInstancePtr) {
+        }
+
+        @Override
+        public boolean hasXlogInstance(String nameprefix) {
+            return false;
         }
 
     };

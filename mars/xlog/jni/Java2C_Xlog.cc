@@ -75,20 +75,14 @@ JNIEXPORT jlong JNICALL Java_com_tencent_mars_xlog_Xlog_newXlogInstance(JNIEnv* 
                                      compresslevel,
                                      cachedir_str,
                                      cachedays};
-    mars::comm::XloggerCategory* category = mars::xlog::NewXloggerInstance(config, (TLogLevel)level);
-    if (nullptr == category) {
-        return 0;
-    }
-    return reinterpret_cast<uintptr_t>(category);
+    uintptr_t instance = mars::xlog::NewXloggerInstance(config, (TLogLevel)level);
+    return (jlong)instance;
 }
 
 JNIEXPORT jlong JNICALL Java_com_tencent_mars_xlog_Xlog_getXlogInstance(JNIEnv* env, jobject, jstring _nameprefix) {
     ScopedJstring nameprefix_jstr(env, _nameprefix);
-    mars::comm::XloggerCategory* category = mars::xlog::GetXloggerInstance(nameprefix_jstr.GetChar());
-    if (nullptr == category) {
-        return 0;
-    }
-    return reinterpret_cast<uintptr_t>(category);
+    uintptr_t instance = mars::xlog::GetXloggerInstance(nameprefix_jstr.GetChar());
+    return (jlong)instance;
 }
 
 JNIEXPORT void JNICALL Java_com_tencent_mars_xlog_Xlog_releaseXlogInstance(JNIEnv* env, jobject, jstring _nameprefix) {
@@ -306,6 +300,20 @@ JNIEXPORT void JNICALL Java_com_tencent_mars_xlog_Xlog_setMaxAliveTime(JNIEnv* e
                                                                        jlong _log_instance_ptr,
                                                                        jlong _max_time) {
     mars::xlog::SetMaxAliveTime(_log_instance_ptr, _max_time);
+}
+
+JNIEXPORT void JNICALL Java_com_tencent_mars_xlog_Xlog_destroyXlogInstance(JNIEnv* env,
+                                                                            jobject,
+                                                                            jlong _instance_ptr) {
+    mars::xlog::DestroyXlogInstance((uintptr_t)_instance_ptr);
+}
+
+JNIEXPORT jboolean JNICALL Java_com_tencent_mars_xlog_Xlog_hasXlogInstance(JNIEnv* env,
+                                                                            jobject,
+                                                                            jstring _nameprefix) {
+    if (NULL == _nameprefix) return JNI_FALSE;
+    ScopedJstring nameprefix_jstr(env, _nameprefix);
+    return mars::xlog::HasXlogInstance(nameprefix_jstr.GetChar()) ? JNI_TRUE : JNI_FALSE;
 }
 }
 
