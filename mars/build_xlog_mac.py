@@ -267,35 +267,104 @@ def _create_xcframework(framework_path: str, output_dir: str) -> bool:
     return True
 
 
-def _find_dsym(build_out_path: str, platform_label: str) -> Optional[str]:
-    """Search for .dSYM bundle produced by xcodebuild in the build output directory."""
-    import glob as _glob
-    pattern = os.path.join(build_out_path, '**', 'MarsXlog.framework.dSYM')
-    matches = _glob.glob(pattern, recursive=True)
-    if matches:
-        log.info('[dSYM] Found for %s: %s', platform_label, matches[0])
-        return matches[0]
-    log.warning('[dSYM] Not found for %s under %s', platform_label, build_out_path)
-    return None
+def _verify_dwarf(xcframework_path: str) -> bool:
+    """Verify that the XCFramework's static framework slice contains DWARF debug info.
+
+    MarsXlog is built as a **static** framework — DWARF is embedded directly in
+    the .a archive objects, not in a separate .dSYM bundle.  Xcode extracts and
+    uses these symbols automatically when linking a consumer app, so no external
+    dSYM file is needed.
+
+    This function runs `dwarfdump --uuid` on each slice binary to confirm that
+    debug symbols are present, and logs a warning if they are missing.
+
+    Parameters
+    ----------
+    xcframework_path : str
+        Path to the assembled MarsXlog.xcframework
+
+    Returns
+    -------
+    True if all discovered slices contain DWARF; False if any slice is missing symbols.
+    """
+    # macOS XCFramework has a single fat-binary slice (arm64 + x86_64 merged via lipo)
+    slice_binaries = {
+        'macos-arm64_x86_64': 'MarsXlog.framework/MarsXlog',
+    }
+
+    all_ok = True
+    for slice_dir, rel_binary in slice_binaries.items():
+        binary_path = os.path.join(xcframework_path, slice_dir, rel_binary)
+        if not os.path.exists(binary_path):
+            log.warning('[DWARF] Binary not found: %s', binary_path)
+            all_ok = False
+            continue
+
+        ret = subprocess.run(
+            ['xcrun', 'dwarfdump', '--uuid', binary_path],
+            capture_output=True, text=True,
+        )
+        output = (ret.stdout + ret.stderr).strip()
+        if ret.returncode == 0 and output:
+            log.info('[DWARF] %s: %s', slice_dir, output)
+        else:
+            # Static .a archives may not report UUIDs but still contain DWARF sections
+            ret2 = subprocess.run(
+                ['xcrun', 'dwarfdump', '-v', '--debug-abbrev', binary_path],
+                capture_output=True, text=True,
+            )
+            if 'DW_TAG' in ret2.stdout:
+                log.info('[DWARF] %s: DWARF sections present (static archive)', slice_dir)
+            else:
+                log.warning('[DWARF] %s: no DWARF debug info found — Release build may lack symbols', slice_dir)
+                all_ok = False
+
+    return all_ok
 
 
 def _embed_dsyms(xcframework_path: str, build_out_path: str) -> bool:
-    """Embed dSYM bundles into the XCFramework slices.
+    """Verify debug symbols are available in the XCFramework (static framework path).
 
-    Apple's XCFramework format supports embedded dSYMs at:
-        <xcframework>/<slice>/dSYMs/<name>.framework.dSYM/
+    MarsXlog is built as a static framework — DWARF debug info is embedded
+    directly in the .a archive objects inside each XCFramework slice.  This is
+    the standard approach for static xcframeworks; a separate .dSYM bundle is
+    only needed for dynamic frameworks/dylibs.
+
+    This function delegates to _verify_dwarf() to confirm symbols are present
+    and logs actionable warnings if they are not.
 
     Parameters
     ----------
     xcframework_path : str
         Path to the assembled MarsXlog.xcframework
     build_out_path : str
-        CMake build root (e.g. cmake_build/OSX/Release) — searched recursively for dSYMs
+        Unused for static frameworks; kept for API compatibility with iOS variant.
 
     Returns
     -------
-    True if at least one dSYM was embedded; False if none found (non-fatal warning).
+    True if DWARF symbols verified in all slices; False if any slice is missing symbols.
     """
+    log.info('[dSYM] Static framework detected — verifying embedded DWARF (no external .dSYM needed)')
+    return _verify_dwarf(xcframework_path)
+
+
+def _find_dsym(build_out_path: str, platform_label: str) -> Optional[str]:
+    """(Unused for static frameworks) Search for external .dSYM bundles.
+
+    Kept for potential future use if the build switches to dynamic frameworks.
+    Static MarsXlog frameworks embed DWARF directly in archive objects.
+    """
+    import glob as _glob
+    pattern = os.path.join(build_out_path, '**', 'MarsXlog.framework.dSYM')
+    matches = _glob.glob(pattern, recursive=True)
+    if matches:
+        log.info('[dSYM] Found external dSYM for %s: %s', platform_label, matches[0])
+        return matches[0]
+    return None
+
+
+def _embed_dsyms_unused(xcframework_path: str, build_out_path: str) -> bool:
+    """(Unused) Original external-dSYM embedding logic for dynamic frameworks."""
     # macOS XCFramework has a single fat-binary slice
     slice_labels = {
         'macos-arm64_x86_64': 'ARM64_X86_64',
@@ -389,13 +458,13 @@ def build_xlog_mac(config: str, outdir: str, incremental: bool) -> bool:
     if not _create_xcframework(fw_path, config_outdir):
         return False
 
-    # ------------------------------------------------------------------ Embed dSYMs (Release only)
+    # ------------------------------------------------------------------ Verify DWARF symbols (Release only)
     if config == 'Release':
         xcframework_path = os.path.join(config_outdir, XCFRAMEWORK_NAME)
         if not _embed_dsyms(xcframework_path, build_out_path):
-            log.warning('No dSYMs embedded — consumers will have limited native debug info')
+            log.warning('DWARF verification failed — consumers may have limited native debug info')
         else:
-            log.info('dSYMs embedded successfully into XCFramework')
+            log.info('DWARF symbols verified in XCFramework')
 
     xcframework_path = os.path.join(config_outdir, XCFRAMEWORK_NAME)
     elapsed = int(time.time() - before_time)
