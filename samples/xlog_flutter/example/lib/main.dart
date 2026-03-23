@@ -68,11 +68,20 @@ class _XLogTestPageState extends State<XLogTestPage> {
 
   void _openInstance() {
     try {
+      /**
+      save private key
+03e08451c97a2388625c636bc8459a1857cc2c40f6d51554808befb363415a30
+
+appender_open's parameter:
+5785f0bd2b145d6fb3acba287cabfdbb96ed6053679ef7b7e0c77ff134f2a86776fe93e77fbed209a93e9165556be8f2d65b6be730da6529e8533643a657e5b1
+       */
       final config = XLogConfig(
         logdir: _logDir,
         nameprefix: 'test',
         mode: XLogAppenderMode.async_,
         compressMode: XLogCompressMode.zstd,
+        pubKey:
+            '5785f0bd2b145d6fb3acba287cabfdbb96ed6053679ef7b7e0c77ff134f2a86776fe93e77fbed209a93e9165556be8f2d65b6be730da6529e8533643a657e5b1',
       );
       _instance = XLog.open(config, level: _selectedLevel);
       _instance!.consoleLogOpen = true;
