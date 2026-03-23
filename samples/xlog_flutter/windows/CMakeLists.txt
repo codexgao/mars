@@ -4,20 +4,31 @@
 # customers of the plugin.
 cmake_minimum_required(VERSION 3.14)
 
-# Project-level configuration.
-set(PROJECT_NAME "xlog_flutter")
-project(${PROJECT_NAME} LANGUAGES CXX)
+project(xlog_flutter_plugin LANGUAGES C CXX)
 
-# Invoke the build for native code shared with the other target platforms.
-# This can be changed to accommodate different builds.
-add_subdirectory("${CMAKE_CURRENT_SOURCE_DIR}/../src" "${CMAKE_CURRENT_BINARY_DIR}/shared")
+# Resolve real path — Flutter uses symlinks for plugin references.
+get_filename_component(PLUGIN_DIR "${CMAKE_CURRENT_SOURCE_DIR}" REALPATH)
 
-# List of absolute paths to libraries that should be bundled with the plugin.
-# This list could contain prebuilt libraries, or libraries created by an
-# external build triggered from this build file.
+# Prebuilt binaries shipped with the plugin (windows/libs/).
+set(XLOG_LIBS_DIR "${PLUGIN_DIR}/libs")
+
+# Imported shared library (prebuilt, not compiled here).
+# This makes the target available for native consumers in the host app
+# who want to link against xlog and call xlog_capi.h functions directly.
+add_library(xlog_flutter SHARED IMPORTED GLOBAL)
+set_target_properties(xlog_flutter PROPERTIES
+  IMPORTED_IMPLIB "${XLOG_LIBS_DIR}/xlog.lib"
+  IMPORTED_LOCATION "${XLOG_LIBS_DIR}/xlog.dll"
+)
+
+# Expose headers so native consumers can:
+#   #include "xlog/xlog_capi.h"
+target_include_directories(xlog_flutter INTERFACE
+  "${PLUGIN_DIR}/include"
+)
+
+# Bundle the DLL (and optionally PDB) into the Flutter application.
 set(xlog_flutter_bundled_libraries
-  # Defined in ../src/CMakeLists.txt.
-  # This can be changed to accommodate different builds.
-  $<TARGET_FILE:xlog_flutter>
+  "${XLOG_LIBS_DIR}/xlog.dll"
   PARENT_SCOPE
 )

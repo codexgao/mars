@@ -8,7 +8,7 @@
 // ignore_for_file: type=lint
 import 'dart:ffi' as ffi;
 
-/// Bindings for `src/xlog_flutter.h`.
+/// Auto-generated FFI bindings for mars xlog C API.
 ///
 /// Regenerate bindings with `dart run ffigen --config ffigen.yaml`.
 ///
@@ -27,43 +27,326 @@ class XlogFlutterBindings {
           lookup)
       : _lookup = lookup;
 
-  /// A very short-lived native function.
-  ///
-  /// For very short-lived functions, it is fine to call them on the main isolate.
-  /// They will block the Dart execution while running the native function, so
-  /// only do this for native functions which are guaranteed to be short-lived.
-  int sum(
-    int a,
-    int b,
+  /// Create a new xlog instance.
+  /// @param config  Instance configuration. logdir and nameprefix are required.
+  /// @param level   Initial log level.
+  /// @return Instance handle (non-zero on success, 0 on failure).
+  /// If an instance with the same nameprefix already exists, returns
+  /// the existing instance handle.
+  int xlog_new_instance(
+    ffi.Pointer<xlog_config_t> config,
+    int level,
   ) {
-    return _sum(
-      a,
-      b,
+    return _xlog_new_instance(
+      config,
+      level,
     );
   }
 
-  late final _sumPtr =
-      _lookup<ffi.NativeFunction<ffi.Int Function(ffi.Int, ffi.Int)>>('sum');
-  late final _sum = _sumPtr.asFunction<int Function(int, int)>();
+  late final _xlog_new_instancePtr = _lookup<
+      ffi.NativeFunction<
+          ffi.UintPtr Function(
+              ffi.Pointer<xlog_config_t>, ffi.Int32)>>('xlog_new_instance');
+  late final _xlog_new_instance = _xlog_new_instancePtr
+      .asFunction<int Function(ffi.Pointer<xlog_config_t>, int)>();
 
-  /// A longer lived native function, which occupies the thread calling it.
-  ///
-  /// Do not call these kind of native functions in the main isolate. They will
-  /// block Dart execution. This will cause dropped frames in Flutter applications.
-  /// Instead, call these native functions on a separate isolate.
-  int sum_long_running(
-    int a,
-    int b,
+  /// Get an existing instance by name prefix.
+  /// @return Instance handle, or 0 if not found.
+  int xlog_get_instance(
+    ffi.Pointer<ffi.Char> nameprefix,
   ) {
-    return _sum_long_running(
-      a,
-      b,
+    return _xlog_get_instance(
+      nameprefix,
     );
   }
 
-  late final _sum_long_runningPtr =
-      _lookup<ffi.NativeFunction<ffi.Int Function(ffi.Int, ffi.Int)>>(
-          'sum_long_running');
-  late final _sum_long_running =
-      _sum_long_runningPtr.asFunction<int Function(int, int)>();
+  late final _xlog_get_instancePtr =
+      _lookup<ffi.NativeFunction<ffi.UintPtr Function(ffi.Pointer<ffi.Char>)>>(
+          'xlog_get_instance');
+  late final _xlog_get_instance =
+      _xlog_get_instancePtr.asFunction<int Function(ffi.Pointer<ffi.Char>)>();
+
+  /// Check if an instance with the given name prefix exists.
+  /// @return 1 if exists, 0 otherwise.
+  int xlog_has_instance(
+    ffi.Pointer<ffi.Char> nameprefix,
+  ) {
+    return _xlog_has_instance(
+      nameprefix,
+    );
+  }
+
+  late final _xlog_has_instancePtr =
+      _lookup<ffi.NativeFunction<ffi.Int Function(ffi.Pointer<ffi.Char>)>>(
+          'xlog_has_instance');
+  late final _xlog_has_instance =
+      _xlog_has_instancePtr.asFunction<int Function(ffi.Pointer<ffi.Char>)>();
+
+  /// Release (close and destroy) an instance by name prefix.
+  /// Uses delayed release to avoid race conditions.
+  void xlog_release_instance(
+    ffi.Pointer<ffi.Char> nameprefix,
+  ) {
+    return _xlog_release_instance(
+      nameprefix,
+    );
+  }
+
+  late final _xlog_release_instancePtr =
+      _lookup<ffi.NativeFunction<ffi.Void Function(ffi.Pointer<ffi.Char>)>>(
+          'xlog_release_instance');
+  late final _xlog_release_instance = _xlog_release_instancePtr
+      .asFunction<void Function(ffi.Pointer<ffi.Char>)>();
+
+  /// Destroy an instance by handle.
+  /// Uses delayed release to avoid race conditions.
+  void xlog_destroy_instance(
+    int instance,
+  ) {
+    return _xlog_destroy_instance(
+      instance,
+    );
+  }
+
+  late final _xlog_destroy_instancePtr =
+      _lookup<ffi.NativeFunction<ffi.Void Function(ffi.UintPtr)>>(
+          'xlog_destroy_instance');
+  late final _xlog_destroy_instance =
+      _xlog_destroy_instancePtr.asFunction<void Function(int)>();
+
+  /// Write a log message to the specified instance.
+  /// @param instance  Instance handle (from xlog_new_instance or xlog_get_instance).
+  /// @param level     Log level for this message.
+  /// @param tag       Log tag (NULL treated as empty).
+  /// @param filename  Source filename (NULL treated as empty).
+  /// @param funcname  Function name (NULL treated as empty).
+  /// @param line      Source line number (0 if unknown).
+  /// @param log       Log message text (required, must not be NULL).
+  void xlog_write(
+    int instance,
+    int level,
+    ffi.Pointer<ffi.Char> tag,
+    ffi.Pointer<ffi.Char> filename,
+    ffi.Pointer<ffi.Char> funcname,
+    int line,
+    ffi.Pointer<ffi.Char> log,
+  ) {
+    return _xlog_write(
+      instance,
+      level,
+      tag,
+      filename,
+      funcname,
+      line,
+      log,
+    );
+  }
+
+  late final _xlog_writePtr = _lookup<
+      ffi.NativeFunction<
+          ffi.Void Function(
+              ffi.UintPtr,
+              ffi.Int32,
+              ffi.Pointer<ffi.Char>,
+              ffi.Pointer<ffi.Char>,
+              ffi.Pointer<ffi.Char>,
+              ffi.Int,
+              ffi.Pointer<ffi.Char>)>>('xlog_write');
+  late final _xlog_write = _xlog_writePtr.asFunction<
+      void Function(int, int, ffi.Pointer<ffi.Char>, ffi.Pointer<ffi.Char>,
+          ffi.Pointer<ffi.Char>, int, ffi.Pointer<ffi.Char>)>();
+
+  /// Check if a log level is enabled for the given instance.
+  /// @return 1 if enabled, 0 otherwise.
+  int xlog_is_enabled_for(
+    int instance,
+    int level,
+  ) {
+    return _xlog_is_enabled_for(
+      instance,
+      level,
+    );
+  }
+
+  late final _xlog_is_enabled_forPtr =
+      _lookup<ffi.NativeFunction<ffi.Int Function(ffi.UintPtr, ffi.Int32)>>(
+          'xlog_is_enabled_for');
+  late final _xlog_is_enabled_for =
+      _xlog_is_enabled_forPtr.asFunction<int Function(int, int)>();
+
+  /// Get the current log level of the instance.
+  int xlog_get_level(
+    int instance,
+  ) {
+    return _xlog_get_level(
+      instance,
+    );
+  }
+
+  late final _xlog_get_levelPtr =
+      _lookup<ffi.NativeFunction<ffi.Int32 Function(ffi.UintPtr)>>(
+          'xlog_get_level');
+  late final _xlog_get_level =
+      _xlog_get_levelPtr.asFunction<int Function(int)>();
+
+  /// Set the log level of the instance.
+  void xlog_set_level(
+    int instance,
+    int level,
+  ) {
+    return _xlog_set_level(
+      instance,
+      level,
+    );
+  }
+
+  late final _xlog_set_levelPtr =
+      _lookup<ffi.NativeFunction<ffi.Void Function(ffi.UintPtr, ffi.Int32)>>(
+          'xlog_set_level');
+  late final _xlog_set_level =
+      _xlog_set_levelPtr.asFunction<void Function(int, int)>();
+
+  /// Set the appender mode (async or sync) for the instance.
+  void xlog_set_appender_mode(
+    int instance,
+    int mode,
+  ) {
+    return _xlog_set_appender_mode(
+      instance,
+      mode,
+    );
+  }
+
+  late final _xlog_set_appender_modePtr =
+      _lookup<ffi.NativeFunction<ffi.Void Function(ffi.UintPtr, ffi.Int32)>>(
+          'xlog_set_appender_mode');
+  late final _xlog_set_appender_mode =
+      _xlog_set_appender_modePtr.asFunction<void Function(int, int)>();
+
+  /// Enable or disable console log output for the instance.
+  /// @param is_open  1 to enable, 0 to disable.
+  void xlog_set_console_log_open(
+    int instance,
+    int is_open,
+  ) {
+    return _xlog_set_console_log_open(
+      instance,
+      is_open,
+    );
+  }
+
+  late final _xlog_set_console_log_openPtr =
+      _lookup<ffi.NativeFunction<ffi.Void Function(ffi.UintPtr, ffi.Int)>>(
+          'xlog_set_console_log_open');
+  late final _xlog_set_console_log_open =
+      _xlog_set_console_log_openPtr.asFunction<void Function(int, int)>();
+
+  /// Flush the log buffer of the instance.
+  /// @param is_sync  1 for synchronous flush, 0 for asynchronous.
+  void xlog_flush(
+    int instance,
+    int is_sync,
+  ) {
+    return _xlog_flush(
+      instance,
+      is_sync,
+    );
+  }
+
+  late final _xlog_flushPtr =
+      _lookup<ffi.NativeFunction<ffi.Void Function(ffi.UintPtr, ffi.Int)>>(
+          'xlog_flush');
+  late final _xlog_flush = _xlog_flushPtr.asFunction<void Function(int, int)>();
+
+  /// Flush all log instances.
+  /// @param is_sync  1 for synchronous flush, 0 for asynchronous.
+  void xlog_flush_all(
+    int is_sync,
+  ) {
+    return _xlog_flush_all(
+      is_sync,
+    );
+  }
+
+  late final _xlog_flush_allPtr =
+      _lookup<ffi.NativeFunction<ffi.Void Function(ffi.Int)>>('xlog_flush_all');
+  late final _xlog_flush_all =
+      _xlog_flush_allPtr.asFunction<void Function(int)>();
+
+  /// Get the current log file path of the instance.
+  /// @param instance  Instance handle.
+  /// @param buf       Output buffer for the path string.
+  /// @param buf_len   Buffer size in bytes.
+  /// @return 1 on success, 0 on failure.
+  int xlog_get_log_path(
+    int instance,
+    ffi.Pointer<ffi.Char> buf,
+    int buf_len,
+  ) {
+    return _xlog_get_log_path(
+      instance,
+      buf,
+      buf_len,
+    );
+  }
+
+  late final _xlog_get_log_pathPtr = _lookup<
+      ffi.NativeFunction<
+          ffi.Int Function(ffi.UintPtr, ffi.Pointer<ffi.Char>,
+              ffi.UnsignedInt)>>('xlog_get_log_path');
+  late final _xlog_get_log_path = _xlog_get_log_pathPtr
+      .asFunction<int Function(int, ffi.Pointer<ffi.Char>, int)>();
+}
+
+/// ---- Enumerations ----
+abstract class xlog_level_t {
+  static const int XLOG_LEVEL_ALL = 0;
+  static const int XLOG_LEVEL_VERBOSE = 0;
+  static const int XLOG_LEVEL_DEBUG = 1;
+  static const int XLOG_LEVEL_INFO = 2;
+  static const int XLOG_LEVEL_WARN = 3;
+  static const int XLOG_LEVEL_ERROR = 4;
+  static const int XLOG_LEVEL_FATAL = 5;
+  static const int XLOG_LEVEL_NONE = 6;
+}
+
+abstract class xlog_appender_mode_t {
+  static const int XLOG_APPENDER_ASYNC = 0;
+  static const int XLOG_APPENDER_SYNC = 1;
+}
+
+abstract class xlog_compress_mode_t {
+  static const int XLOG_COMPRESS_ZLIB = 0;
+  static const int XLOG_COMPRESS_ZSTD = 1;
+}
+
+/// ---- Configuration ----
+final class xlog_config_t extends ffi.Struct {
+  /// < Async or sync appender mode
+  @ffi.Int32()
+  external int mode;
+
+  /// < Log output directory (required)
+  external ffi.Pointer<ffi.Char> logdir;
+
+  /// < Instance identifier (required)
+  external ffi.Pointer<ffi.Char> nameprefix;
+
+  /// < Encryption public key (NULL = no encryption)
+  external ffi.Pointer<ffi.Char> pub_key;
+
+  /// < Compression algorithm
+  @ffi.Int32()
+  external int compress_mode;
+
+  /// < Compression level 0-9
+  @ffi.Int()
+  external int compress_level;
+
+  /// < Cache directory (NULL = disabled)
+  external ffi.Pointer<ffi.Char> cachedir;
+
+  /// < Cache retention days (0 = unlimited)
+  @ffi.Int()
+  external int cache_days;
 }

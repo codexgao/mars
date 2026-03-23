@@ -27,3 +27,9 @@ migrate_working_dir/
 **/doc/api/
 .dart_tool/
 build/
+
+# Override root .gitignore: prebuilt native binaries must be committed
+# for plugin distribution.
+!windows/libs/*.dll
+!windows/libs/*.lib
+!windows/libs/*.pdb
