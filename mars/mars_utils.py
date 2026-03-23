@@ -49,6 +49,7 @@ COMM_COPY_HEADER_FILES = {
     "mars/xlog/xlog_config.h": "xlog",
     "mars/xlog/appender.h": "xlog",
     "mars/xlog/xlogger_interface.h": "xlog",
+    "mars/xlog/capi/xlog_capi.h": "xlog",
 
     "mars/app/app.h": "app",
     "mars/app/app_logic.h": "app",
@@ -95,6 +96,7 @@ XLOG_COPY_HEADER_FILES = {
     "mars/xlog/xlog_config.h": "xlog",
     "mars/xlog/appender.h": "xlog",
     "mars/xlog/xlogger_interface.h": "xlog",
+    "mars/xlog/capi/xlog_capi.h": "xlog",
 }
 
 

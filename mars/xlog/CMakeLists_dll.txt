@@ -63,7 +63,13 @@ file(GLOB XLOG_CRYPT_FILES
     ${XLOG_ROOT}/crypt/micro-ecc-master/*.h
 )
 
-set(ALL_XLOG_SRC ${XLOG_SRC_FILES} ${XLOG_CRYPT_FILES})
+# C API wrapper files
+file(GLOB XLOG_CAPI_FILES
+    ${XLOG_ROOT}/capi/*.cc
+    ${XLOG_ROOT}/capi/*.h
+)
+
+set(ALL_XLOG_SRC ${XLOG_SRC_FILES} ${XLOG_CRYPT_FILES} ${XLOG_CAPI_FILES})
 
 if(MSVC)
     add_definitions(/FI"${MARS_ROOT}/comm/projdef.h")
@@ -83,6 +89,9 @@ set_target_properties(xlog_dll PROPERTIES
     WINDOWS_EXPORT_ALL_SYMBOLS ON
     OUTPUT_NAME "xlog"
 )
+
+# Enable C API export macro for xlog_capi.h
+target_compile_definitions(xlog_dll PRIVATE XLOG_CAPI_EXPORT)
 
 # OpenSSL static libraries (required by comm: Thread::cleanup -> OPENSSL_thread_stop,
 # strutil::BufferMD5 -> MD5)
