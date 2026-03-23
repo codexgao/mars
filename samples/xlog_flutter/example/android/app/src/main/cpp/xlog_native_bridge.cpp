@@ -67,31 +67,75 @@ Java_com_codexgao_xlog_1flutter_1example_XlogNativeBridge_nativeInit(
 
 extern "C" JNIEXPORT jint JNICALL
 Java_com_codexgao_xlog_1flutter_1example_XlogNativeBridge_nativeWrite(
-    JNIEnv* /*env*/,
+    JNIEnv* env,
     jobject /*thiz*/,
-    jlong /*handle*/,
-    jint /*level*/,
-    jstring /*tag*/,
-    jstring /*message*/) {
-    // TODO(Task 4): 实现 nativeWrite，将日志写入 xlog 实例。
-    return -1;
+    jlong handle,
+    jint level,
+    jstring tag,
+    jstring message) {
+    if (handle == 0 || message == nullptr) {
+        __android_log_print(ANDROID_LOG_ERROR, kNativeLogTag,
+                            "nativeWrite failed: invalid args handle=%lld message=%p",
+                            static_cast<long long>(handle), message);
+        return -1;
+    }
+
+    const char* message_cstr = env->GetStringUTFChars(message, nullptr);
+    if (message_cstr == nullptr) {
+        __android_log_print(ANDROID_LOG_ERROR, kNativeLogTag,
+                            "nativeWrite failed: message GetStringUTFChars returned null");
+        return -1;
+    }
+
+    const char* tag_cstr = "";
+    if (tag != nullptr) {
+        tag_cstr = env->GetStringUTFChars(tag, nullptr);
+        if (tag_cstr == nullptr) {
+            __android_log_print(ANDROID_LOG_ERROR, kNativeLogTag,
+                                "nativeWrite failed: tag GetStringUTFChars returned null");
+            env->ReleaseStringUTFChars(message, message_cstr);
+            return -1;
+        }
+    }
+
+    xlog_write(static_cast<uintptr_t>(handle), static_cast<xlog_level_t>(level), tag_cstr,
+               "", "", 0, message_cstr);
+
+    if (tag != nullptr) {
+        env->ReleaseStringUTFChars(tag, tag_cstr);
+    }
+    env->ReleaseStringUTFChars(message, message_cstr);
+
+    return 0;
 }
 
 extern "C" JNIEXPORT jint JNICALL
 Java_com_codexgao_xlog_1flutter_1example_XlogNativeBridge_nativeFlush(
     JNIEnv* /*env*/,
     jobject /*thiz*/,
-    jlong /*handle*/,
-    jboolean /*isSync*/) {
-    // TODO(Task 4): 实现 nativeFlush，支持同步/异步刷新。
-    return -1;
+    jlong handle,
+    jboolean isSync) {
+    if (handle == 0) {
+        __android_log_print(ANDROID_LOG_ERROR, kNativeLogTag,
+                            "nativeFlush failed: invalid handle=0");
+        return -1;
+    }
+
+    xlog_flush(static_cast<uintptr_t>(handle), isSync ? 1 : 0);
+    return 0;
 }
 
 extern "C" JNIEXPORT jint JNICALL
 Java_com_codexgao_xlog_1flutter_1example_XlogNativeBridge_nativeRelease(
     JNIEnv* /*env*/,
     jobject /*thiz*/,
-    jlong /*handle*/) {
-    // TODO(Task 4): 实现 nativeRelease，释放实例资源。
-    return -1;
+    jlong handle) {
+    if (handle == 0) {
+        __android_log_print(ANDROID_LOG_ERROR, kNativeLogTag,
+                            "nativeRelease failed: invalid handle=0");
+        return -1;
+    }
+
+    xlog_destroy_instance(static_cast<uintptr_t>(handle));
+    return 0;
 }
