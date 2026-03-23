@@ -49,13 +49,14 @@ endfunction()
 set(FLUTTER_MANAGED_DIR "${CMAKE_CURRENT_SOURCE_DIR}/flutter")
 add_subdirectory(${FLUTTER_MANAGED_DIR})
 
-# Application build; see runner/CMakeLists.txt.
-add_subdirectory("runner")
-
-
 # Generated plugin build rules, which manage building the plugins and adding
 # them to the application.
+# NOTE: Must come before add_subdirectory("runner") so that IMPORTED GLOBAL
+# targets (e.g. xlog_flutter) are visible when runner/CMakeLists.txt is processed.
 include(flutter/generated_plugins.cmake)
+
+# Application build; see runner/CMakeLists.txt.
+add_subdirectory("runner")
 
 
 # === Installation ===
