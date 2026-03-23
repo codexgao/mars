@@ -1,0 +1,119 @@
+cmake_minimum_required(VERSION 3.6)
+project(xlog_dll_build)
+
+set(CMAKE_INSTALL_PREFIX "${CMAKE_BINARY_DIR}" CACHE PATH "Installation directory" FORCE)
+message(STATUS "CMAKE_INSTALL_PREFIX=${CMAKE_INSTALL_PREFIX}")
+
+# Paths: XLOG_SOURCE_DIR must be passed from the build script via -DXLOG_SOURCE_DIR=...
+# This avoids path issues when this file is copied into the build directory.
+if(NOT DEFINED XLOG_SOURCE_DIR)
+    # Fallback: assume this file is in its original location (mars/xlog/)
+    set(XLOG_SOURCE_DIR "${CMAKE_CURRENT_LIST_DIR}")
+endif()
+set(MARS_ROOT "${XLOG_SOURCE_DIR}/..")
+set(XLOG_ROOT "${XLOG_SOURCE_DIR}")
+
+# Include openssl headers (required by comm)
+include_directories(${MARS_ROOT}/openssl/include)
+
+# ---- Dependencies (built as static libraries, linked into the DLL) ----
+
+# comm
+add_subdirectory(${MARS_ROOT}/comm ${CMAKE_BINARY_DIR}/comm)
+
+# mars-boost
+add_subdirectory(${MARS_ROOT}/boost ${CMAKE_BINARY_DIR}/boost)
+
+# zstd
+option(ZSTD_BUILD_STATIC "BUILD STATIC LIBRARIES" ON)
+option(ZSTD_BUILD_SHARED "BUILD SHARED LIBRARIES" OFF)
+option(ZSTD_USE_STATIC_RUNTIME "Use static CRT for zstd" OFF)  # Use /MD to match DLL CRT
+set(ZSTD_SOURCE_DIR "${MARS_ROOT}/zstd")
+set(LIBRARY_DIR ${ZSTD_SOURCE_DIR}/lib)
+include(GNUInstallDirs)
+add_subdirectory(${MARS_ROOT}/zstd/build/cmake/lib ${CMAKE_BINARY_DIR}/zstd)
+
+# ---- xlog DLL target ----
+
+include(${MARS_ROOT}/comm/utils.cmake)
+
+include_directories(${XLOG_ROOT})
+include_directories(${XLOG_ROOT}/src)
+include_directories(${MARS_ROOT})
+include_directories(${MARS_ROOT}/..)
+include_directories(${MARS_ROOT}/comm)
+include_directories(${MARS_ROOT}/comm/xlogger)
+include_directories(${MARS_ROOT}/crypt)
+include_directories(${MARS_ROOT}/crypt/micro-ecc-master)
+
+# xlog source files
+file(GLOB XLOG_SRC_FILES
+    ${XLOG_ROOT}/src/*.cc
+    ${XLOG_ROOT}/src/*.h
+)
+# Exclude unit test and mock files
+list(FILTER XLOG_SRC_FILES EXCLUDE REGEX ".*_unittest\\.cc$")
+list(FILTER XLOG_SRC_FILES EXCLUDE REGEX ".*_mock\\.cc$")
+
+# crypt source files
+file(GLOB XLOG_CRYPT_FILES
+    ${XLOG_ROOT}/crypt/*.cc
+    ${XLOG_ROOT}/crypt/*.h
+    ${XLOG_ROOT}/crypt/micro-ecc-master/*.c
+    ${XLOG_ROOT}/crypt/micro-ecc-master/*.h
+)
+
+set(ALL_XLOG_SRC ${XLOG_SRC_FILES} ${XLOG_CRYPT_FILES})
+
+if(MSVC)
+    add_definitions(/FI"${MARS_ROOT}/comm/projdef.h")
+    include_directories(${MARS_ROOT}/comm/windows)
+    include_directories(${MARS_ROOT}/comm/windows/zlib)
+
+    # Warning suppression (from CMakeExtraFlags.txt)
+    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} /wd4003 /wd4819 /wd4996 /wd4244 /wd4101 /wd4200 /wd4800 /wd4005 /wd4334")
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /wd4003 /wd4819 /wd4996 /wd4244 /wd4101 /wd4200 /wd4800 /wd4005 /wd4334")
+endif()
+
+# Build as SHARED library (DLL)
+add_library(xlog_dll SHARED ${ALL_XLOG_SRC})
+
+# Export all symbols automatically (no .def file or __declspec needed)
+set_target_properties(xlog_dll PROPERTIES
+    WINDOWS_EXPORT_ALL_SYMBOLS ON
+    OUTPUT_NAME "xlog"
+)
+
+# OpenSSL static libraries (required by comm: Thread::cleanup -> OPENSSL_thread_stop,
+# strutil::BufferMD5 -> MD5)
+set(OPENSSL_LIB_DIR "${MARS_ROOT}/openssl/openssl_lib_windows/x64")
+find_library(OPENSSL_CRYPTO_LIB NAMES libcrypto PATHS "${OPENSSL_LIB_DIR}" NO_DEFAULT_PATH)
+find_library(OPENSSL_SSL_LIB NAMES libssl PATHS "${OPENSSL_LIB_DIR}" NO_DEFAULT_PATH)
+if(NOT OPENSSL_CRYPTO_LIB OR NOT OPENSSL_SSL_LIB)
+    message(FATAL_ERROR "OpenSSL libraries not found in ${OPENSSL_LIB_DIR}")
+endif()
+message(STATUS "OpenSSL crypto: ${OPENSSL_CRYPTO_LIB}")
+message(STATUS "OpenSSL ssl: ${OPENSSL_SSL_LIB}")
+
+# Link static dependencies + Windows system libraries
+target_link_libraries(xlog_dll
+    comm
+    mars-boost
+    libzstd_static
+    ${OPENSSL_CRYPTO_LIB}
+    ${OPENSSL_SSL_LIB}
+    ws2_32          # WinSock2 (used by comm)
+    Winhttp         # HTTP (used by comm)
+    Wininet         # Internet (used by comm)
+    Iphlpapi        # IP Helper (used by comm)
+    Shlwapi         # Shell Lightweight Utility (used by comm)
+    Crypt32         # Crypto (used by comm)
+    runtimeobject   # WinRT (used by comm thread)
+)
+
+# Install: DLL + import lib + PDB
+install(TARGETS xlog_dll
+    RUNTIME DESTINATION ${CMAKE_INSTALL_PREFIX}     # .dll
+    LIBRARY DESTINATION ${CMAKE_INSTALL_PREFIX}     # .so (Linux)
+    ARCHIVE DESTINATION ${CMAKE_INSTALL_PREFIX}     # .lib (import lib)
+)
