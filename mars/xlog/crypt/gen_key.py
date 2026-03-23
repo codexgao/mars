@@ -1,19 +1,25 @@
-from binascii import hexlify, unhexlify
+#!/usr/bin/env python3
+"""Generate secp256k1 ECC key pair for mars xlog encryption.
 
-import pyelliptic
+Output:
+  - Private key (hex): used by the decode script to decrypt logs.
+  - Public key (hex):  passed to xlog_config_t.pub_key (or appender_open).
 
-CURVE = 'secp256k1'
+Dependencies: pip install ecdsa
+"""
 
-svr = pyelliptic.ECC(curve=CURVE)
+from binascii import hexlify
+from ecdsa import SigningKey, SECP256k1
 
-svr_pubkey = svr.get_pubkey()
-svr_privkey = svr.get_privkey()
+sk = SigningKey.generate(curve=SECP256k1)
+vk = sk.get_verifying_key()
 
+privkey_hex = hexlify(sk.to_string()).decode('ascii')
+# Uncompressed public key = pubkey_x (32 bytes) + pubkey_y (32 bytes)
+pubkey_hex = hexlify(vk.to_string()).decode('ascii')
 
 print("save private key")
-
-print(hexlify(svr_privkey))
+print(privkey_hex)
 
 print("\nappender_open's parameter:")
-print("%s%s" %(hexlify(svr.pubkey_x),  hexlify(svr.pubkey_y)))
-
+print(pubkey_hex)
