@@ -125,8 +125,12 @@ def DecodeBuffer(_buffer, _offset, _outbuffer):
 
         if MAGIC_NO_COMPRESS_START1==_buffer[_offset] or MAGIC_COMPRESS_START2==_buffer[_offset] or MAGIC_SYNC_ZSTD_START==_buffer[_offset] or MAGIC_ASYNC_ZSTD_START==_buffer[_offset]:
             print("use wrong decode script")
-        elif MAGIC_ASYNC_NO_CRYPT_ZSTD_START == _buffer[_offset] or MAGIC_SYNC_NO_CRYPT_ZSTD_START == _buffer[_offset]:
+        elif MAGIC_ASYNC_NO_CRYPT_ZSTD_START == _buffer[_offset]:
+            # Async mode: data is compressed with zstd
             tmpbuffer = _zstd_decompress(bytes(tmpbuffer))
+        elif MAGIC_SYNC_NO_CRYPT_ZSTD_START == _buffer[_offset]:
+            # Sync mode: data is NOT compressed (despite zstd config), pass through directly
+            pass
         elif MAGIC_COMPRESS_START==_buffer[_offset] or MAGIC_COMPRESS_NO_CRYPT_START==_buffer[_offset]:
             decompressor = zlib.decompressobj(-zlib.MAX_WBITS)
             tmpbuffer = decompressor.decompress(bytes(tmpbuffer))
