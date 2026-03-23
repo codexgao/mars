@@ -49,7 +49,6 @@ class _XLogTestPageState extends State<XLogTestPage> {
 
   Future<void> _initialize() async {
     try {
-      XLog.initialize();
       final appDir = await getApplicationDocumentsDirectory();
       _logDir = '${appDir.path}${Platform.pathSeparator}xlog_test';
 
@@ -60,7 +59,7 @@ class _XLogTestPageState extends State<XLogTestPage> {
       }
 
       setState(() => _initialized = true);
-      _addLog('OK: XLog initialized');
+      _addLog('OK: Ready');
       _addLog('Log dir: $_logDir');
     } catch (e) {
       _addLog('ERROR: $e');
@@ -104,8 +103,7 @@ class _XLogTestPageState extends State<XLogTestPage> {
       return;
     }
     try {
-      _instance!.write(level, 'TestTag',
-          '[$levelName] Hello from xlog_flutter! (${DateTime.now()})');
+      _instance!.write(level, 'TestTag', '[$levelName] Hello from xlog_flutter! (${DateTime.now()})');
       _addLog('OK: Wrote $levelName log');
     } catch (e) {
       _addLog('ERROR: $e');
@@ -222,9 +220,7 @@ class _XLogTestPageState extends State<XLogTestPage> {
           Container(
             width: double.infinity,
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-            color: _instanceOpen
-                ? Colors.green.shade50
-                : Colors.grey.shade100,
+            color: _instanceOpen ? Colors.green.shade50 : Colors.grey.shade100,
             child: Text(
               _instanceOpen
                   ? 'Instance: open (handle=${_instance!.handle}, level=${_selectedLevel.name})'
@@ -277,7 +273,9 @@ class _XLogTestPageState extends State<XLogTestPage> {
                 // Level selector
                 DropdownButton<XLogLevel>(
                   value: _selectedLevel,
-                  onChanged: (v) { if (v != null) _setLevel(v); },
+                  onChanged: (v) {
+                    if (v != null) _setLevel(v);
+                  },
                   items: XLogLevel.values
                       .where((l) => l != XLogLevel.all)
                       .map((l) => DropdownMenuItem(value: l, child: Text(l.name)))

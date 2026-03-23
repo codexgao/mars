@@ -4,10 +4,7 @@
 /// ```dart
 /// import 'package:xlog_flutter/xlog_flutter.dart';
 ///
-/// // Initialize (loads native library)
-/// XLog.initialize();
-///
-/// // Open a log instance
+/// // Open a log instance (native library loads automatically)
 /// final log = XLog.open(XLogConfig(
 ///   logdir: '/path/to/logs',
 ///   nameprefix: 'myapp',

@@ -215,10 +215,9 @@ class XLogInstance {
 
 /// Singleton manager for xlog instances.
 ///
-/// Call [XLog.initialize] before any other operation.
+/// The native library is loaded automatically on first use.
 ///
 /// ```dart
-/// XLog.initialize();
 /// final instance = XLog.open(XLogConfig(
 ///   logdir: '/path/to/logs',
 ///   nameprefix: 'myapp',
@@ -237,8 +236,8 @@ class XLog {
 
   /// Load the native xlog library for the current platform.
   ///
-  /// Must be called once before any other [XLog] operations.
-  /// Safe to call multiple times (subsequent calls are no-ops).
+  /// Called automatically on first use. Safe to call explicitly
+  /// if you want to control when the library is loaded (e.g. at startup).
   static void initialize() {
     if (_bindings != null) return;
 
@@ -262,12 +261,8 @@ class XLog {
   }
 
   static XlogFlutterBindings get _b {
-    final b = _bindings;
-    if (b == null) {
-      throw StateError(
-          'XLog not initialized. Call XLog.initialize() first.');
-    }
-    return b;
+    if (_bindings == null) initialize();
+    return _bindings!;
   }
 
   /// Create a new xlog instance with the given configuration.
