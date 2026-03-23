@@ -1,92 +1,185 @@
 # xlog_flutter
 
-A new Flutter FFI plugin project.
+Flutter FFI plugin for [Mars xlog](https://github.com/Tencent/mars) - a high-performance, reliable logging library from WeChat.
+
+## Features
+
+- Multi-instance logging with independent configurations
+- High performance with async writing
+- Compression support (Zlib, Zstandard)
+- Encryption support (ECC + TEA)
+- Multi-process safe
+- Cross-platform: Android, iOS, Windows, macOS, Linux
 
 ## Getting Started
 
-This project is a starting point for a Flutter
-[FFI plugin](https://flutter.dev/to/ffi-package),
-a specialized package that includes native code directly invoked with Dart FFI.
+### 1. Build xlog Native Library
 
-## Project structure
+Before using this plugin, you need to build the xlog native library for your target platform.
 
-This template uses the following structure:
+#### Android
 
-* `src`: Contains the native source code, and a CmakeFile.txt file for building
-  that source code into a dynamic library.
+```bash
+# Set NDK environment variable
+export NDK_ROOT=/path/to/android-ndk  # Linux/macOS
+set NDK_ROOT=D:\Android\Sdk\ndk\25.x.x  # Windows
 
-* `lib`: Contains the Dart code that defines the API of the plugin, and which
-  calls into the native code using `dart:ffi`.
-
-* platform folders (`android`, `ios`, `windows`, etc.): Contains the build files
-  for building and bundling the native code library with the platform application.
-
-## Building and bundling native code
-
-The `pubspec.yaml` specifies FFI plugins as follows:
-
-```yaml
-  plugin:
-    platforms:
-      some_platform:
-        ffiPlugin: true
+# Build for Android
+cd mars/xlog
+# Release: stripped .so + .debug symbols
+python build_android.py --config Release --output-dir ../../samples/xlog_flutter/android/src/main/jniLibs --arch armeabi-v7a arm64-v8a
+# Debug: unstripped .so
+python build_android.py --config Debug --output-dir ../../samples/xlog_flutter/android/src/debug/jniLibs --arch armeabi-v7a arm64-v8a
 ```
 
-This configuration invokes the native build for the various target platforms
-and bundles the binaries in Flutter applications using these FFI plugins.
+Release output is written to `src/main/jniLibs`, and Debug output is written to `src/debug/jniLibs`.
 
-This can be combined with dartPluginClass, such as when FFI is used for the
-implementation of one platform in a federated plugin:
+#### Windows
 
-```yaml
-  plugin:
-    implements: some_other_plugin
-    platforms:
-      some_platform:
-        dartPluginClass: SomeClass
-        ffiPlugin: true
+```bash
+# Set Visual Studio environment
+set MSVC_TOOLS_PATH=D:\Program Files\Microsoft Visual Studio\2022\Professional\Common7\Tools
+
+cd mars/xlog
+python build_windows.py --config Release
 ```
 
-A plugin can have both FFI and method channels:
+The output will be in `mars/xlog/build/windows/Release/`.
+
+### 2. Add Dependency
+
+Add to your `pubspec.yaml`:
 
 ```yaml
-  plugin:
-    platforms:
-      some_platform:
-        pluginClass: SomeName
-        ffiPlugin: true
+dependencies:
+  xlog_flutter:
+    path: ../samples/xlog_flutter
 ```
 
-The native build systems that are invoked by FFI (and method channel) plugins are:
+### 3. Usage
 
-* For Android: Gradle, which invokes the Android NDK for native builds.
-  * See the documentation in android/build.gradle.
-* For iOS and MacOS: Xcode, via CocoaPods.
-  * See the documentation in ios/xlog_flutter.podspec.
-  * See the documentation in macos/xlog_flutter.podspec.
-* For Linux and Windows: CMake.
-  * See the documentation in linux/CMakeLists.txt.
-  * See the documentation in windows/CMakeLists.txt.
+```dart
+import 'package:xlog_flutter/xlog_flutter.dart';
 
-## Binding to native code
+// Initialize (auto-loads native library)
+XLog.initialize();
 
-To use the native code, bindings in Dart are needed.
-To avoid writing these by hand, they are generated from the header file
-(`src/xlog_flutter.h`) by `package:ffigen`.
-Regenerate the bindings by running `dart run ffigen --config ffigen.yaml`.
+// Open an instance
+final instance = XLog.open(XLogConfig(
+  logdir: '/path/to/logs',
+  nameprefix: 'myapp',
+  mode: XLogAppenderMode.async_,
+  compressMode: XLogCompressMode.zstd,
+));
 
-## Invoking native code
+// Write logs
+instance.debug('TAG', 'Debug message');
+instance.info('TAG', 'Info message');
+instance.error('TAG', 'Error message');
 
-Very short-running native functions can be directly invoked from any isolate.
-For example, see `sum` in `lib/xlog_flutter.dart`.
+// Flush before exit
+instance.flush(sync: true);
 
-Longer-running functions should be invoked on a helper isolate to avoid
-dropping frames in Flutter applications.
-For example, see `sumAsync` in `lib/xlog_flutter.dart`.
+// Release instance
+XLog.release('myapp');
+```
 
-## Flutter help
+## Platform-Specific Notes
 
-For help getting started with Flutter, view our
-[online documentation](https://docs.flutter.dev), which offers tutorials,
-samples, guidance on mobile development, and a full API reference.
+### Android
 
+1. Each process must use a unique `nameprefix`
+2. Use `getFilesDir()` for log directory to avoid SIGBUS issues
+3. `libc++_shared.so` is included automatically
+
+### iOS
+
+1. Log directory should be marked as "do not backup"
+2. Link `mars.framework` in your Xcode project
+
+### Windows
+
+1. Place `xlog.dll` in the same directory as your executable
+2. Requires Visual C++ Redistributable
+
+## Configuration Options
+
+| Option | Description | Default |
+|--------|-------------|---------|
+| `logdir` | Log output directory (required) | - |
+| `nameprefix` | Instance identifier (required) | - |
+| `mode` | Async or sync writing | `async_` |
+| `pubKey` | Encryption public key (optional) | `null` |
+| `compressMode` | Zlib or Zstd compression | `zlib` |
+| `compressLevel` | Compression level (0-9) | `0` |
+| `cachedir` | Cache directory (optional) | `null` |
+| `cacheDays` | Cache retention days | `0` |
+
+## Building from Source
+
+### Prerequisites
+
+- Python 3.10+
+- CMake 3.10+
+- NDK r20+ (for Android)
+- Visual Studio 2022 (for Windows)
+- Xcode 14+ (for iOS/macOS)
+
+### Build Commands
+
+```bash
+# Android (output to default build directory)
+python mars/xlog/build_android.py --arch armeabi-v7a arm64-v8a
+
+# Android (output to custom directory)
+python mars/xlog/build_android.py --output-dir ./output --arch armeabi-v7a arm64-v8a
+
+# Windows
+python mars/xlog/build_windows.py --config Release
+
+# iOS (TODO)
+python mars/xlog/build_ios.py
+```
+
+## Output Structure
+
+### Android (`build_android.py --output-dir`)
+
+```
+samples/xlog_flutter/android/src/main/jniLibs/
+├── armeabi-v7a/
+│   ├── libxlog.so          # stripped
+│   └── libc++_shared.so
+├── arm64-v8a/
+│   ├── libxlog.so          # stripped
+│   └── libc++_shared.so
+└── symbols/                # debug symbols for Release
+    ├── armeabi-v7a/
+    │   └── libxlog.so.debug
+    └── arm64-v8a/
+        └── libxlog.so.debug
+
+samples/xlog_flutter/android/src/debug/jniLibs/
+├── armeabi-v7a/
+│   ├── libxlog.so          # unstripped
+│   └── libc++_shared.so
+└── arm64-v8a/
+    ├── libxlog.so          # unstripped
+    └── libc++_shared.so
+```
+
+### Windows (`build_windows.py`)
+
+```
+mars/xlog/build/windows/
+├── Release/
+│   ├── xlog.dll
+│   ├── xlog.lib
+│   └── xlog.pdb
+└── include/
+    └── ...
+```
+
+## License
+
+MIT License - same as Mars project.

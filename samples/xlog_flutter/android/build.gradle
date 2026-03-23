@@ -10,7 +10,6 @@ buildscript {
     }
 
     dependencies {
-        // The Android Gradle Plugin knows how to build native code with the NDK.
         classpath("com.android.tools.build:gradle:8.1.0")
     }
 }
@@ -29,28 +28,15 @@ android {
         namespace = "com.codexgao.xlog_flutter"
     }
 
-    // Bumping the plugin compileSdk version requires all clients of this plugin
-    // to bump the version in their app.
     compileSdk = 34
 
-    // Use the NDK version
-    // declared in /android/app/build.gradle file of the Flutter project.
-    // Replace it with a version number if this plugin requires a specific NDK version.
-    // (e.g. ndkVersion "23.1.7779620")
     ndkVersion = android.ndkVersion
 
-    // Invoke the shared CMake build with the Android Gradle Plugin.
-    externalNativeBuild {
-        cmake {
-            path = "../src/CMakeLists.txt"
+    defaultConfig {
+        minSdk = 21
 
-            // The default CMake version for the Android Gradle Plugin is 3.10.2.
-            // https://developer.android.com/studio/projects/install-ndk#vanilla_cmake
-            //
-            // The Flutter tooling requires that developers have CMake 3.10 or later
-            // installed. You should not increase this version, as doing so will cause
-            // the plugin to fail to compile for some customers of the plugin.
-            // version "3.10.2"
+        ndk {
+            abiFilters 'armeabi-v7a', 'arm64-v8a', 'x86_64'
         }
     }
 
@@ -58,8 +44,11 @@ android {
         sourceCompatibility = JavaVersion.VERSION_1_8
         targetCompatibility = JavaVersion.VERSION_1_8
     }
-
-    defaultConfig {
-        minSdk = 21
-    }
 }
+
+// Build instructions:
+//   cd mars/xlog
+//   # Release (stripped .so + .debug symbols)
+//   python build_android.py --config Release --output-dir ../../samples/xlog_flutter/android/src/main/jniLibs --arch armeabi-v7a arm64-v8a
+//   # Debug (unstripped .so)
+//   python build_android.py --config Debug --output-dir ../../samples/xlog_flutter/android/src/debug/jniLibs --arch armeabi-v7a arm64-v8a

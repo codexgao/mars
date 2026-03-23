@@ -720,7 +720,7 @@ class jbuffer {
         return size_ == 0;
     }
     uint8_t& operator[](size_t pos) {
-        assert(pos < size_);
+        assert(static_cast<int64_t>(pos) < size_);
         return data_[pos];
     }
 

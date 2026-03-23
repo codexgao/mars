@@ -1,0 +1,112 @@
+cmake_minimum_required(VERSION 3.6)
+project(xlog_android_build)
+
+set(CMAKE_INSTALL_PREFIX "${CMAKE_BINARY_DIR}" CACHE PATH "Installation directory" FORCE)
+message(STATUS "CMAKE_INSTALL_PREFIX=${CMAKE_INSTALL_PREFIX}")
+
+# Paths: XLOG_SOURCE_DIR must be passed from the build script via -DXLOG_SOURCE_DIR=...
+if(NOT DEFINED XLOG_SOURCE_DIR)
+    set(XLOG_SOURCE_DIR "${CMAKE_CURRENT_LIST_DIR}")
+endif()
+set(MARS_ROOT "${XLOG_SOURCE_DIR}/..")
+set(XLOG_ROOT "${XLOG_SOURCE_DIR}")
+
+# Include openssl headers (required by comm for MD5)
+include_directories(${MARS_ROOT}/openssl/include)
+
+# ---- Dependencies (built as static libraries, linked into the SO) ----
+
+# comm
+add_subdirectory(${MARS_ROOT}/comm ${CMAKE_BINARY_DIR}/comm)
+
+# mars-boost
+add_subdirectory(${MARS_ROOT}/boost ${CMAKE_BINARY_DIR}/boost)
+
+# zstd
+option(ZSTD_BUILD_STATIC "BUILD STATIC LIBRARIES" ON)
+option(ZSTD_BUILD_SHARED "BUILD SHARED LIBRARIES" OFF)
+set(ZSTD_SOURCE_DIR "${MARS_ROOT}/zstd")
+set(LIBRARY_DIR ${ZSTD_SOURCE_DIR}/lib)
+include(GNUInstallDirs)
+add_subdirectory(${MARS_ROOT}/zstd/build/cmake/lib ${CMAKE_BINARY_DIR}/zstd)
+
+# ---- xlog SO target ----
+
+include(${MARS_ROOT}/comm/utils.cmake)
+
+include_directories(${XLOG_ROOT})
+include_directories(${XLOG_ROOT}/src)
+include_directories(${MARS_ROOT})
+include_directories(${MARS_ROOT}/..)
+include_directories(${MARS_ROOT}/comm)
+include_directories(${MARS_ROOT}/comm/xlogger)
+include_directories(${MARS_ROOT}/crypt)
+include_directories(${MARS_ROOT}/crypt/micro-ecc-master)
+
+# xlog source files
+file(GLOB XLOG_SRC_FILES ${XLOG_ROOT}/src/*.cc ${XLOG_ROOT}/src/*.h)
+list(FILTER XLOG_SRC_FILES EXCLUDE REGEX ".*_unittest\\.cc$")
+list(FILTER XLOG_SRC_FILES EXCLUDE REGEX ".*_mock\\.cc$")
+
+# crypt source files
+file(GLOB XLOG_CRYPT_FILES
+    ${XLOG_ROOT}/crypt/*.cc
+    ${XLOG_ROOT}/crypt/*.h
+    ${XLOG_ROOT}/crypt/micro-ecc-master/*.c
+    ${XLOG_ROOT}/crypt/micro-ecc-master/*.h
+)
+
+# C API wrapper files
+file(GLOB XLOG_CAPI_FILES ${XLOG_ROOT}/capi/*.cc ${XLOG_ROOT}/capi/*.h)
+
+# Android-specific source files
+set(XLOG_ANDROID_FILES ${XLOG_ROOT}/jni/ConsoleLog.cc)
+
+set(ALL_XLOG_SRC ${XLOG_SRC_FILES} ${XLOG_CRYPT_FILES} ${XLOG_CAPI_FILES} ${XLOG_ANDROID_FILES})
+
+# Android-specific configuration
+if(ANDROID)
+    add_definitions(-D__ANDROID__)
+    add_definitions(-DUSE_MARS_XLOG)
+    add_definitions(-DUSING_XLOG_WEAK_FUNC)
+    set(CMAKE_CXX_VISIBILITY_PRESET hidden)
+    set(CMAKE_C_VISIBILITY_PRESET hidden)
+endif()
+
+# Build as SHARED library (.so)
+add_library(xlog SHARED ${ALL_XLOG_SRC})
+
+set_target_properties(xlog PROPERTIES OUTPUT_NAME "xlog" VERSION 1.2.3 SOVERSION 1)
+
+target_compile_definitions(xlog PRIVATE XLOG_CAPI_EXPORT)
+
+# Find system libraries
+find_library(LOG_LIB log)
+find_library(Z_LIB z)
+
+# Find OpenSSL static libraries for Android
+set(OPENSSL_LIB_DIR "${MARS_ROOT}/openssl/openssl_lib_android/${ANDROID_ABI}")
+if(EXISTS "${OPENSSL_LIB_DIR}/libcrypto.a")
+    set(OPENSSL_CRYPTO_LIB "${OPENSSL_LIB_DIR}/libcrypto.a")
+    set(OPENSSL_SSL_LIB "${OPENSSL_LIB_DIR}/libssl.a")
+    message(STATUS "OpenSSL crypto: ${OPENSSL_CRYPTO_LIB}")
+    message(STATUS "OpenSSL ssl: ${OPENSSL_SSL_LIB}")
+else()
+    message(WARNING "OpenSSL libraries not found in ${OPENSSL_LIB_DIR}")
+endif()
+
+# Link static dependencies + system libraries
+# Use linker group to handle circular dependencies between mars-boost and comm
+target_link_libraries(xlog
+    -Wl,--start-group
+    comm
+    mars-boost
+    -Wl,--end-group
+    libzstd_static
+    ${LOG_LIB}
+    ${Z_LIB}
+    ${OPENSSL_CRYPTO_LIB}
+    ${OPENSSL_SSL_LIB}
+)
+
+install(TARGETS xlog LIBRARY DESTINATION ${CMAKE_INSTALL_PREFIX})
