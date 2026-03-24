@@ -24,7 +24,7 @@ set_target_properties(xlog_flutter PROPERTIES
 # Expose headers so native consumers can:
 #   #include "xlog/xlog_capi.h"
 target_include_directories(xlog_flutter INTERFACE
-  "${PLUGIN_DIR}/include"
+  "${PLUGIN_DIR}/../include"
 )
 
 # Bundle the DLL (and optionally PDB) into the Flutter application.
