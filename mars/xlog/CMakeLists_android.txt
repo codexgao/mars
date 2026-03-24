@@ -60,7 +60,9 @@ file(GLOB XLOG_CRYPT_FILES
 file(GLOB XLOG_CAPI_FILES ${XLOG_ROOT}/capi/*.cc ${XLOG_ROOT}/capi/*.h)
 
 # Android-specific source files
-set(XLOG_ANDROID_FILES ${XLOG_ROOT}/jni/ConsoleLog.cc)
+set(XLOG_ANDROID_FILES
+    ${XLOG_ROOT}/jni/ConsoleLog.cc
+)
 
 set(ALL_XLOG_SRC ${XLOG_SRC_FILES} ${XLOG_CRYPT_FILES} ${XLOG_CAPI_FILES} ${XLOG_ANDROID_FILES})
 
