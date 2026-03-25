@@ -25,9 +25,10 @@ Universal Static Framework covering iOS device (arm64) and simulator (x86_64).
   s.dependency 'Flutter'
   s.platform = :ios, '12.0'
 
-  # xlog.framework links against these system frameworks internally.
+  # xlog.framework is a C++ static library; libc++ must be linked explicitly.
+  # Foundation/CoreFoundation are used internally by xlog comm module.
   s.frameworks = 'Foundation', 'CoreFoundation'
-  s.libraries  = 'z'
+  s.libraries  = 'z', 'c++'
 
   s.pod_target_xcconfig = {
     'DEFINES_MODULE'                        => 'YES',
