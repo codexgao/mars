@@ -138,6 +138,43 @@ def find_static_lib(build_dir: str) -> Optional[str]:
     return None
 
 
+def merge_all_deps(build_dir: str, arch: str, out_a: str) -> bool:
+    """
+    Merge libxlog.a together with all its static dependencies into a single
+    self-contained archive.
+
+    Dependencies built by CMake (found in build_dir subdirs):
+      comm/libcomm.a
+      boost/libmars-boost.a
+      zstd/libzstd.a
+
+    OpenSSL (prebuilt fat library, thinned to target arch):
+      openssl_lib_iOS/libcrypto.a
+      openssl_lib_iOS/libssl.a
+
+    The resulting archive is fully self-contained; consumers only need to
+    link libxlog.a and the system frameworks (Foundation, CoreFoundation, z).
+    """
+    xlog_a    = os.path.join(build_dir, 'libxlog.a')
+    comm_a    = os.path.join(build_dir, 'comm', 'libcomm.a')
+    boost_a   = os.path.join(build_dir, 'boost', 'libmars-boost.a')
+    zstd_a    = os.path.join(build_dir, 'zstd', 'libzstd.a')
+
+    for path in (xlog_a, comm_a, boost_a, zstd_a):
+        if not os.path.isfile(path):
+            print(f'Error: dependency not found: {path}')
+            return False
+
+    # NOTE: OpenSSL is NOT merged here. The prebuilt openssl_lib_iOS only
+    # contains a fat binary with iphoneos arm64 + x86_64 simulator, but lacks
+    # an arm64-simulator slice. Merging it would cause xcodebuild
+    # -create-xcframework to fail with "binaries with multiple platforms".
+    # OpenSSL symbols are provided at link time via the podspec's
+    # vendored_frameworks referencing OpenSSL.xcframework.
+    print(f'[libtool] Merging all deps into {out_a} (arch={arch})')
+    return libtool_libs([xlog_a, comm_a, boost_a, zstd_a], out_a)
+
+
 def merge_simulator_libs(sim_x86_a: str, sim_arm64_a: str, out_a: str) -> bool:
     """
     Merge x86_64 and arm64 simulator static libraries into one fat archive.
@@ -265,10 +302,10 @@ def main() -> None:
             print(f'!!!!!!!!!!!!!!!!!!CMake generate failed for {key}!!!!!!!!!!!!!!!!!!!!')
             sys.exit(1)
 
-    # Step 4: Build each target
+    # Step 4: Build each target and merge all deps into self-contained archive
     print(f'[4/6] Building xlog static libs ({config})...')
     built_libs: dict = {}
-    for key, _, _ in IOS_TARGETS:
+    for key, _, arch in IOS_TARGETS:
         build_dir = build_dirs[key]
         print(f'  Building {key}...')
         if not cmake_build(build_dir, config, key):
@@ -279,8 +316,15 @@ def main() -> None:
         if not lib_path or not os.path.isfile(lib_path):
             print(f'Error: libxlog.a not found after build for target={key}')
             sys.exit(1)
-        built_libs[key] = lib_path
-        print(f'  [{key}] {lib_path}')
+
+        # Merge xlog + all dependency libs into one self-contained archive.
+        # Without this, the app linker cannot resolve symbols from comm/boost/zstd/OpenSSL.
+        full_a = os.path.join(build_dir, 'libxlog_full.a')
+        if not merge_all_deps(build_dir, arch, full_a):
+            print(f'!!!!!!!!!!!!!!!!!!Dependency merge failed for {key}!!!!!!!!!!!!!!!!!!!!')
+            sys.exit(1)
+        built_libs[key] = full_a
+        print(f'  [{key}] {full_a}')
 
     # Step 5: Merge simulator libs
     print('[5/6] Merging simulator architectures...')
@@ -298,6 +342,20 @@ def main() -> None:
     if not create_xcframework(built_libs['device'], sim_merged_a, output_xcframework):
         print('!!!!!!!!!!!!!!!!!!XCFramework assembly failed!!!!!!!!!!!!!!!!!!!!')
         sys.exit(1)
+
+    # Copy OpenSSL.xcframework to output so podspec can reference it.
+    # The prebuilt openssl_lib_iOS/libcrypto.a lacks an arm64-simulator slice,
+    # so we cannot merge OpenSSL into libxlog.xcframework. Instead we ship
+    # OpenSSL.xcframework as a sibling vendored_frameworks entry in the podspec.
+    openssl_src = os.path.join(MARS_PATH, 'openssl', 'openssl_lib_iOS', 'OpenSSL.xcframework')
+    openssl_dst = os.path.join(output_dir, 'openssl', 'OpenSSL.xcframework')
+    if os.path.isdir(openssl_src):
+        if os.path.exists(openssl_dst):
+            shutil.rmtree(openssl_dst)
+        shutil.copytree(openssl_src, openssl_dst)
+        print(f'  OpenSSL.xcframework -> {openssl_dst}')
+    else:
+        print(f'Warning: OpenSSL.xcframework not found at {openssl_src}')
 
     after_time: float = time.time()
 

@@ -18,8 +18,13 @@ XCFramework covering iOS device (arm64) and simulator (x86_64 + arm64).
 
   # Prebuilt XCFramework (device arm64 + simulator x86_64+arm64).
   # Build it first with: python mars/xlog/build_ios.py --config Release
-  s.vendored_frameworks = 'libs/Release/libxlog.xcframework'
-  s.preserve_paths      = 'libs/**/*'
+  # libxlog.xcframework bundles xlog + comm + boost + zstd (all statically linked).
+  # OpenSSL is provided separately via OpenSSL.xcframework below.
+  s.vendored_frameworks = [
+    'libs/Release/libxlog.xcframework',
+    'libs/openssl/OpenSSL.xcframework',
+  ]
+  s.preserve_paths = 'libs/**/*'
 
   s.dependency 'Flutter'
   s.platform = :ios, '12.0'
