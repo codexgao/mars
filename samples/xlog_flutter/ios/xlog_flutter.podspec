@@ -7,7 +7,7 @@ Pod::Spec.new do |s|
   s.summary          = 'Flutter FFI plugin for mars xlog (iOS).'
   s.description      = <<-DESC
 Flutter FFI plugin for the mars xlog logging library. Uses a prebuilt
-XCFramework covering iOS device (arm64) and simulator (x86_64 + arm64).
+Universal Static Framework covering iOS device (arm64) and simulator (x86_64).
                        DESC
   s.homepage         = 'https://github.com/Tencent/mars'
   s.license          = { :file => '../LICENSE' }
@@ -16,18 +16,18 @@ XCFramework covering iOS device (arm64) and simulator (x86_64 + arm64).
   s.source           = { :path => '.' }
   s.source_files     = 'Classes/**/*'
 
-  # Prebuilt XCFramework (device arm64 + simulator x86_64+arm64).
+  # Prebuilt Universal Static Framework (device arm64 + simulator x86_64).
   # Build it first with: python mars/xlog/build_ios.py --config Release
-  # libxlog.xcframework bundles xlog + comm + boost + zstd (all statically linked).
-  # OpenSSL is provided separately via OpenSSL.xcframework below.
-  s.vendored_frameworks = [
-    'libs/Release/libxlog.xcframework',
-    'libs/openssl/OpenSSL.xcframework',
-  ]
+  # xlog.framework bundles xlog + comm + boost + zstd + OpenSSL (all statically linked).
+  s.vendored_frameworks = 'libs/Release/xlog.framework'
   s.preserve_paths = 'libs/**/*'
 
   s.dependency 'Flutter'
   s.platform = :ios, '12.0'
+
+  # xlog.framework links against these system frameworks internally.
+  s.frameworks = 'Foundation', 'CoreFoundation'
+  s.libraries  = 'z'
 
   s.pod_target_xcconfig = {
     'DEFINES_MODULE'                        => 'YES',

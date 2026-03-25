@@ -1,13 +1,17 @@
 #!/usr/bin/env python3
 """
-Build script for xlog iOS XCFramework.
+Build script for xlog iOS Static Framework.
 
-Compiles the xlog module (and its dependencies: comm, boost, zstd) into an
-iOS XCFramework containing:
-  - Device slice:    arm64           (iphoneos)
-  - Simulator slice: x86_64 + arm64  (iphonesimulator)
+Compiles the xlog module (and its dependencies: comm, boost, zstd, OpenSSL)
+into a Universal Static Framework (xlog.framework) containing:
+  - Device slice:    arm64   (iphoneos)
+  - Simulator slice: x86_64  (iphonesimulator)
 
-Outputs libxlog.xcframework to the configured output directory.
+Note: OpenSSL arm64-simulator slice is not available in the prebuilt
+openssl_lib_iOS archive, so arm64 simulator is excluded. The framework
+covers real device (arm64) and Intel simulator (x86_64) targets.
+
+Outputs xlog.framework to the configured output directory.
 
 Usage:
     python build_ios.py --config Release
@@ -44,11 +48,18 @@ from mars_utils import (
 CMAKE_LISTS_FILE: str = os.path.join(SCRIPT_PATH, 'CMakeLists_ios.txt')
 DEPLOYMENT_TARGET: str = '12.0'
 
-# Three compilation targets: (key, sysroot, arch)
+# Two compilation targets: (key, sysroot, arch)
+# arm64-simulator is excluded because the prebuilt OpenSSL does not include
+# an arm64-simulator slice, and we need OpenSSL in every slice.
 IOS_TARGETS = [
-    ('device',    'iphoneos',       'arm64'),
-    ('sim_x86',   'iphonesimulator', 'x86_64'),
-    ('sim_arm64', 'iphonesimulator', 'arm64'),
+    ('device',  'iphoneos',        'arm64'),
+    ('sim_x86', 'iphonesimulator', 'x86_64'),
+]
+
+# Headers to include in xlog.framework/Headers/
+# Only the C API header that Flutter FFI consumers need.
+FRAMEWORK_HEADERS = [
+    os.path.join(SCRIPT_PATH, 'capi', 'xlog_capi.h'),
 ]
 
 
@@ -143,80 +154,135 @@ def merge_all_deps(build_dir: str, arch: str, out_a: str) -> bool:
     Merge libxlog.a together with all its static dependencies into a single
     self-contained archive.
 
-    Dependencies built by CMake (found in build_dir subdirs):
+    Dependencies built by CMake:
       comm/libcomm.a
       boost/libmars-boost.a
       zstd/libzstd.a
 
-    OpenSSL (prebuilt fat library, thinned to target arch):
-      openssl_lib_iOS/libcrypto.a
-      openssl_lib_iOS/libssl.a
+    OpenSSL (thinned to target arch from the prebuilt fat binary):
+      openssl_lib_iOS/libcrypto.a  → thinned to arch
+      openssl_lib_iOS/libssl.a     → thinned to arch
 
     The resulting archive is fully self-contained; consumers only need to
-    link libxlog.a and the system frameworks (Foundation, CoreFoundation, z).
+    link the system frameworks (Foundation, CoreFoundation, z).
     """
-    xlog_a    = os.path.join(build_dir, 'libxlog.a')
-    comm_a    = os.path.join(build_dir, 'comm', 'libcomm.a')
-    boost_a   = os.path.join(build_dir, 'boost', 'libmars-boost.a')
-    zstd_a    = os.path.join(build_dir, 'zstd', 'libzstd.a')
+    xlog_a  = os.path.join(build_dir, 'libxlog.a')
+    comm_a  = os.path.join(build_dir, 'comm', 'libcomm.a')
+    boost_a = os.path.join(build_dir, 'boost', 'libmars-boost.a')
+    zstd_a  = os.path.join(build_dir, 'zstd', 'libzstd.a')
 
     for path in (xlog_a, comm_a, boost_a, zstd_a):
         if not os.path.isfile(path):
             print(f'Error: dependency not found: {path}')
             return False
 
-    # NOTE: OpenSSL is NOT merged here. The prebuilt openssl_lib_iOS only
-    # contains a fat binary with iphoneos arm64 + x86_64 simulator, but lacks
-    # an arm64-simulator slice. Merging it would cause xcodebuild
-    # -create-xcframework to fail with "binaries with multiple platforms".
-    # OpenSSL symbols are provided at link time via the podspec's
-    # vendored_frameworks referencing OpenSSL.xcframework.
+    # Thin OpenSSL fat binaries to the target arch.
+    # The prebuilt openssl_lib_iOS contains arm64 (device) + x86_64 (simulator).
+    openssl_lib_dir = os.path.join(MARS_PATH, 'openssl', 'openssl_lib_iOS')
+    openssl_crypto_fat = os.path.join(openssl_lib_dir, 'libcrypto.a')
+    openssl_ssl_fat    = os.path.join(openssl_lib_dir, 'libssl.a')
+
+    thin_dir = os.path.join(build_dir, 'openssl_thin')
+    os.makedirs(thin_dir, exist_ok=True)
+    crypto_thin = os.path.join(thin_dir, 'libcrypto.a')
+    ssl_thin    = os.path.join(thin_dir, 'libssl.a')
+
+    for fat, thin in ((openssl_crypto_fat, crypto_thin), (openssl_ssl_fat, ssl_thin)):
+        if not os.path.isfile(fat):
+            print(f'Error: OpenSSL fat lib not found: {fat}')
+            return False
+        ret = subprocess.call(
+            ['lipo', fat, '-thin', arch, '-output', thin],
+            stdout=subprocess.DEVNULL,
+        )
+        if ret != 0:
+            print(f'Error: lipo -thin {arch} failed for {fat}')
+            return False
+
     print(f'[libtool] Merging all deps into {out_a} (arch={arch})')
-    return libtool_libs([xlog_a, comm_a, boost_a, zstd_a], out_a)
+    return libtool_libs([xlog_a, comm_a, boost_a, zstd_a, crypto_thin, ssl_thin], out_a)
 
 
-def merge_simulator_libs(sim_x86_a: str, sim_arm64_a: str, out_a: str) -> bool:
+def create_fat_lib(device_a: str, sim_a: str, out_a: str) -> bool:
     """
-    Merge x86_64 and arm64 simulator static libraries into one fat archive.
+    Use lipo -create to combine per-architecture static archives into a
+    Universal (fat) binary.
 
-    libtool -static is used (not lipo) because .a files are archives of
-    object files, not single Mach-O binaries. libtool handles the merging
-    of object file archives correctly.
+    Note: lipo works here because each input .a is already a single-arch
+    archive (not a fat binary). lipo -create produces a fat archive.
     """
     os.makedirs(os.path.dirname(out_a), exist_ok=True)
-    print(f'[libtool] Merging simulator libs:')
-    print(f'  x86_64: {sim_x86_a}')
-    print(f'  arm64:  {sim_arm64_a}')
-    print(f'  output: {out_a}')
-    return libtool_libs([sim_x86_a, sim_arm64_a], out_a)
-
-
-def create_xcframework(device_a: str, simulator_a: str, output_xcframework: str) -> bool:
-    """
-    Use xcodebuild -create-xcframework to assemble the final XCFramework from
-    the device and (merged) simulator static libraries.
-    """
-    # Remove existing xcframework first (xcodebuild will fail if it already exists)
-    if os.path.exists(output_xcframework):
-        shutil.rmtree(output_xcframework)
-
-    xcf_cmd: str = (
-        f'xcodebuild -create-xcframework '
-        f'-library "{device_a}" '
-        f'-library "{simulator_a}" '
-        f'-output "{output_xcframework}"'
-    )
-    print(f'[xcframework] {xcf_cmd}')
-    ret: int = subprocess.call(xcf_cmd, shell=True)
+    print(f'[lipo] Creating fat lib:')
+    print(f'  device (arm64): {device_a}')
+    print(f'  sim (x86_64):   {sim_a}')
+    print(f'  output:         {out_a}')
+    ret = subprocess.call(['lipo', '-create', device_a, sim_a, '-output', out_a])
     if ret != 0:
-        print('Error: xcodebuild -create-xcframework failed.')
+        print('Error: lipo -create failed.')
         return False
+    return True
 
-    if not os.path.isdir(output_xcframework):
-        print(f'Error: xcframework directory not found at {output_xcframework}')
-        return False
 
-    print(f'  XCFramework -> {output_xcframework}')
+def create_framework(fat_a: str, framework_dir: str) -> bool:
+    """
+    Assemble a Static Framework from a fat static archive and the C API headers.
+
+    xlog.framework/
+      xlog          ← fat static library (the binary)
+      Headers/
+        xlog_capi.h ← public C API header
+      Info.plist    ← minimal framework plist
+    """
+    # Clean and create framework directory
+    if os.path.exists(framework_dir):
+        shutil.rmtree(framework_dir)
+    os.makedirs(framework_dir, exist_ok=True)
+
+    # 1. Copy binary (no extension, just the framework name)
+    framework_name = os.path.splitext(os.path.basename(framework_dir))[0]
+    binary_dst = os.path.join(framework_dir, framework_name)
+    shutil.copy2(fat_a, binary_dst)
+    print(f'  binary  -> {binary_dst}')
+
+    # 2. Copy headers
+    headers_dir = os.path.join(framework_dir, 'Headers')
+    os.makedirs(headers_dir, exist_ok=True)
+    for h in FRAMEWORK_HEADERS:
+        if not os.path.isfile(h):
+            print(f'Warning: header not found: {h}')
+            continue
+        dst = os.path.join(headers_dir, os.path.basename(h))
+        shutil.copy2(h, dst)
+        print(f'  header  -> {dst}')
+
+    # 3. Write minimal Info.plist
+    info_plist = os.path.join(framework_dir, 'Info.plist')
+    plist_content = f'''<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
+    "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>CFBundleExecutable</key>
+    <string>{framework_name}</string>
+    <key>CFBundleIdentifier</key>
+    <string>com.tencent.mars.{framework_name}</string>
+    <key>CFBundleName</key>
+    <string>{framework_name}</string>
+    <key>CFBundlePackageType</key>
+    <string>FMWK</string>
+    <key>CFBundleShortVersionString</key>
+    <string>1.0</string>
+    <key>CFBundleVersion</key>
+    <string>1</string>
+    <key>MinimumOSVersion</key>
+    <string>{DEPLOYMENT_TARGET}</string>
+</dict>
+</plist>
+'''
+    with open(info_plist, 'w') as f:
+        f.write(plist_content)
+    print(f'  plist   -> {info_plist}')
+
     return True
 
 
@@ -225,8 +291,8 @@ def create_xcframework(device_a: str, simulator_a: str, output_xcframework: str)
 def main() -> None:
     parser = argparse.ArgumentParser(
         description=(
-            'Build xlog as an iOS XCFramework '
-            '(device: arm64, simulator: x86_64 + arm64)'
+            'Build xlog as an iOS Static Framework '
+            '(device: arm64, simulator: x86_64)'
         )
     )
     parser.add_argument(
@@ -267,15 +333,14 @@ def main() -> None:
         for key, _, _ in IOS_TARGETS
     }
 
-    # Intermediate merged simulator lib
-    sim_merge_dir: str = os.path.join(build_base, 'cmake_tmp_ios_sim_merged')
-    sim_merged_a: str = os.path.join(sim_merge_dir, 'libxlog.a')
+    # Intermediate fat lib and final framework
+    fat_dir: str = os.path.join(build_base, 'cmake_tmp_ios_fat')
+    fat_a:   str = os.path.join(fat_dir, 'xlog')
 
-    # Final outputs
     config_output_dir: str = os.path.join(output_dir, config)
-    output_xcframework: str = os.path.join(config_output_dir, 'libxlog.xcframework')
+    output_framework: str = os.path.join(config_output_dir, 'xlog.framework')
 
-    print('========== xlog iOS XCFramework Build ==========')
+    print('========== xlog iOS Static Framework Build ==========')
     print(f'  Config:      {config}')
     print(f'  Incremental: {incremental}')
     print(f'  Output:      {output_dir}')
@@ -285,29 +350,23 @@ def main() -> None:
     before_time: float = time.time()
 
     # Step 1: Check environment
-    print('[1/6] Checking environment...')
+    print('[1/5] Checking environment...')
     if not check_environment():
         sys.exit(1)
 
     # Step 2: Generate version info
-    print('[2/6] Generating version info...')
+    print('[2/5] Generating version info...')
     gen_mars_revision_file(os.path.join(MARS_PATH, 'comm'))
 
-    # Step 3: Configure CMake for each target
-    print('[3/6] Configuring CMake projects...')
+    # Step 3: Configure + build each target
+    print(f'[3/5] Building xlog static libs ({config})...')
+    built_libs: dict = {}
     for key, sysroot, arch in IOS_TARGETS:
         build_dir = build_dirs[key]
         clean(build_dir, incremental)
         if not cmake_generate(build_dir, sysroot, arch, config):
             print(f'!!!!!!!!!!!!!!!!!!CMake generate failed for {key}!!!!!!!!!!!!!!!!!!!!')
             sys.exit(1)
-
-    # Step 4: Build each target and merge all deps into self-contained archive
-    print(f'[4/6] Building xlog static libs ({config})...')
-    built_libs: dict = {}
-    for key, _, arch in IOS_TARGETS:
-        build_dir = build_dirs[key]
-        print(f'  Building {key}...')
         if not cmake_build(build_dir, config, key):
             print(f'!!!!!!!!!!!!!!!!!!Build failed for {key}!!!!!!!!!!!!!!!!!!!!')
             sys.exit(1)
@@ -317,59 +376,41 @@ def main() -> None:
             print(f'Error: libxlog.a not found after build for target={key}')
             sys.exit(1)
 
-        # Merge xlog + all dependency libs into one self-contained archive.
-        # Without this, the app linker cannot resolve symbols from comm/boost/zstd/OpenSSL.
-        # NOTE: The output must be named 'libxlog.a' in all slices so that CocoaPods
-        # validation passes (it requires all platform slices to share the same binary name).
+        # Merge xlog + comm + boost + zstd + OpenSSL (thinned) into one archive.
+        # Output named 'xlog' (no lib prefix) to match the framework binary name.
         merged_dir = os.path.join(build_dir, 'merged')
         os.makedirs(merged_dir, exist_ok=True)
-        full_a = os.path.join(merged_dir, 'libxlog.a')
-        if not merge_all_deps(build_dir, arch, full_a):
+        merged_a = os.path.join(merged_dir, 'xlog')
+        if not merge_all_deps(build_dir, arch, merged_a):
             print(f'!!!!!!!!!!!!!!!!!!Dependency merge failed for {key}!!!!!!!!!!!!!!!!!!!!')
             sys.exit(1)
-        built_libs[key] = full_a
-        print(f'  [{key}] {full_a}')
+        built_libs[key] = merged_a
+        print(f'  [{key}] {merged_a}')
 
-    # Step 5: Merge simulator libs
-    print('[5/6] Merging simulator architectures...')
-    os.makedirs(sim_merge_dir, exist_ok=True)
-    if not merge_simulator_libs(built_libs['sim_x86'], built_libs['sim_arm64'], sim_merged_a):
-        print('!!!!!!!!!!!!!!!!!!Simulator lib merge failed!!!!!!!!!!!!!!!!!!!!')
-        sys.exit(1)
-    if not os.path.isfile(sim_merged_a):
-        print(f'Error: merged simulator lib not found at {sim_merged_a}')
+    # Step 4: Create fat (Universal) static lib via lipo
+    print('[4/5] Creating Universal fat library...')
+    os.makedirs(fat_dir, exist_ok=True)
+    if not create_fat_lib(built_libs['device'], built_libs['sim_x86'], fat_a):
+        print('!!!!!!!!!!!!!!!!!!Fat lib creation failed!!!!!!!!!!!!!!!!!!!!')
         sys.exit(1)
 
-    # Step 6: Assemble XCFramework
-    print('[6/6] Assembling XCFramework...')
+    # Step 5: Assemble framework
+    print('[5/5] Assembling xlog.framework...')
     os.makedirs(config_output_dir, exist_ok=True)
-    if not create_xcframework(built_libs['device'], sim_merged_a, output_xcframework):
-        print('!!!!!!!!!!!!!!!!!!XCFramework assembly failed!!!!!!!!!!!!!!!!!!!!')
+    if not create_framework(fat_a, output_framework):
+        print('!!!!!!!!!!!!!!!!!!Framework assembly failed!!!!!!!!!!!!!!!!!!!!')
         sys.exit(1)
-
-    # Copy OpenSSL.xcframework to output so podspec can reference it.
-    # The prebuilt openssl_lib_iOS/libcrypto.a lacks an arm64-simulator slice,
-    # so we cannot merge OpenSSL into libxlog.xcframework. Instead we ship
-    # OpenSSL.xcframework as a sibling vendored_frameworks entry in the podspec.
-    openssl_src = os.path.join(MARS_PATH, 'openssl', 'openssl_lib_iOS', 'OpenSSL.xcframework')
-    openssl_dst = os.path.join(output_dir, 'openssl', 'OpenSSL.xcframework')
-    if os.path.isdir(openssl_src):
-        if os.path.exists(openssl_dst):
-            shutil.rmtree(openssl_dst)
-        shutil.copytree(openssl_src, openssl_dst)
-        print(f'  OpenSSL.xcframework -> {openssl_dst}')
-    else:
-        print(f'Warning: OpenSSL.xcframework not found at {openssl_src}')
 
     after_time: float = time.time()
 
     print()
     print('==================== Build Complete ====================')
-    print(f'  XCFramework: {output_xcframework}')
-    print(f'  Time:        {int(after_time - before_time)}s')
+    print(f'  Framework: {output_framework}')
+    print(f'  Time:      {int(after_time - before_time)}s')
     print()
     print('Verify with:')
-    print(f'  ls {output_xcframework}')
+    print(f'  ls {output_framework}')
+    print(f'  lipo -info {output_framework}/xlog')
     print('========================================================')
 
 
