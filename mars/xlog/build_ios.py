@@ -319,7 +319,11 @@ def main() -> None:
 
         # Merge xlog + all dependency libs into one self-contained archive.
         # Without this, the app linker cannot resolve symbols from comm/boost/zstd/OpenSSL.
-        full_a = os.path.join(build_dir, 'libxlog_full.a')
+        # NOTE: The output must be named 'libxlog.a' in all slices so that CocoaPods
+        # validation passes (it requires all platform slices to share the same binary name).
+        merged_dir = os.path.join(build_dir, 'merged')
+        os.makedirs(merged_dir, exist_ok=True)
+        full_a = os.path.join(merged_dir, 'libxlog.a')
         if not merge_all_deps(build_dir, arch, full_a):
             print(f'!!!!!!!!!!!!!!!!!!Dependency merge failed for {key}!!!!!!!!!!!!!!!!!!!!')
             sys.exit(1)
