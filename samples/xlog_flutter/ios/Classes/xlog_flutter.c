@@ -1,3 +1,4 @@
-// Relative import to be able to reuse the C sources.
-// See the comment in ../xlog_flutter.podspec for more information.
-#include "../../src/xlog_flutter.c"
+// This file is intentionally left as a stub.
+// The xlog library is provided as a prebuilt XCFramework
+// (libs/Release/libxlog.xcframework).
+// No source compilation is needed here.

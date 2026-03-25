@@ -1,28 +1,32 @@
 #
-# To learn more about a Podspec see http://guides.cocoapods.org/syntax/podspec.html.
 # Run `pod lib lint xlog_flutter.podspec` to validate before publishing.
 #
 Pod::Spec.new do |s|
   s.name             = 'xlog_flutter'
   s.version          = '0.0.1'
-  s.summary          = 'A new Flutter FFI plugin project.'
+  s.summary          = 'Flutter FFI plugin for mars xlog (iOS).'
   s.description      = <<-DESC
-A new Flutter FFI plugin project.
+Flutter FFI plugin for the mars xlog logging library. Uses a prebuilt
+XCFramework covering iOS device (arm64) and simulator (x86_64 + arm64).
                        DESC
-  s.homepage         = 'http://example.com'
+  s.homepage         = 'https://github.com/Tencent/mars'
   s.license          = { :file => '../LICENSE' }
-  s.author           = { 'Your Company' => 'email@example.com' }
+  s.author           = { 'Tencent' => 'mars@tencent.com' }
 
-  # This will ensure the source files in Classes/ are included in the native
-  # builds of apps using this FFI plugin. Podspec does not support relative
-  # paths, so Classes contains a forwarder C file that relatively imports
-  # `../src/*` so that the C sources can be shared among all target platforms.
   s.source           = { :path => '.' }
-  s.source_files = 'Classes/**/*'
+  s.source_files     = 'Classes/**/*'
+
+  # Prebuilt XCFramework (device arm64 + simulator x86_64+arm64).
+  # Build it first with: python mars/xlog/build_ios.py --config Release
+  s.vendored_frameworks = 'libs/Release/libxlog.xcframework'
+  s.preserve_paths      = 'libs/**/*'
+
   s.dependency 'Flutter'
   s.platform = :ios, '12.0'
 
-  # Flutter.framework does not contain a i386 slice.
-  s.pod_target_xcconfig = { 'DEFINES_MODULE' => 'YES', 'EXCLUDED_ARCHS[sdk=iphonesimulator*]' => 'i386' }
+  s.pod_target_xcconfig = {
+    'DEFINES_MODULE'                        => 'YES',
+    'EXCLUDED_ARCHS[sdk=iphonesimulator*]'  => 'i386',
+  }
   s.swift_version = '5.0'
 end
