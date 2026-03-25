@@ -31,6 +31,11 @@ class MainFlutterWindow: NSWindow {
       log.warn("MainFlutterWindow", msg: "this is a warning from native wrapper")
 
       log.flush(false)
+      if let path = log.logPath {
+        NSLog("[xlog native] log file path: %@", path)
+      } else {
+        NSLog("[xlog native] log file path: (nil — may not be written yet)")
+      }
       XLogManager.releaseInstance(withName: "native_demo")
     }
     // END xlog example

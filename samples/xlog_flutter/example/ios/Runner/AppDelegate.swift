@@ -27,8 +27,13 @@ import xlog_flutter
       log.debug("AppDelegate", msg: "application did finish launching")
       log.warn("AppDelegate", msg: "this is a warning from native wrapper")
 
-      // Flush and release when done
+      // Flush, print log path, then release
       log.flush(false)
+      if let path = log.logPath {
+        NSLog("[xlog native] log file path: %@", path)
+      } else {
+        NSLog("[xlog native] log file path: (nil — may not be written yet)")
+      }
       XLogManager.releaseInstance(withName: "native_demo")
     }
     // END xlog example
