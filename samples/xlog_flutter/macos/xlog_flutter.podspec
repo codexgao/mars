@@ -30,7 +30,7 @@ Build with: python3 mars/xlog/build_macos.py --config Release
   s.platform = :osx, '10.13'
   s.pod_target_xcconfig = {
     'DEFINES_MODULE' => 'YES',
-    'OTHER_LDFLAGS' => '$(inherited) -rpath @loader_path/Frameworks'
+    'LD_RUNPATH_SEARCH_PATHS' => '$(inherited) @loader_path/Frameworks'
   }
   s.swift_version = '5.0'
 end

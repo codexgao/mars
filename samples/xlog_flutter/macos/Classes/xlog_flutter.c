@@ -1,3 +1,3 @@
-// Relative import to be able to reuse the C sources.
-// See the comment in ../xlog_flutter.podspec for more information.
-#include "../../src/xlog_flutter.c"
+// Stub file required by Flutter FFI plugin structure.
+// All xlog symbols are provided by the prebuilt libxlog.dylib (vendored_libraries).
+// No source compilation needed here.
