@@ -220,6 +220,11 @@ s.public_header_files = 'Classes/XLog.h',
                         'Classes/XLogManager.h'
 ```
 
+**目录结构说明：** `ios/Classes/` 在 `prepare_command` 运行后包含：
+- `xlog_symbols.c` — iOS 特有的符号强制链接文件（保留在 `ios/Classes/`，不复制）
+- `XLog*.h/.m` — 从 `darwin/Classes/` 复制的共享代码
+- `xlog_flutter.c` — 存根文件（若存在，也保留）
+
 ### 4.2 macOS（`macos/xlog_flutter.podspec`）
 
 同样新增 `prepare_command`：
@@ -236,7 +241,19 @@ s.public_header_files = 'Classes/XLog.h',
                         'Classes/XLogManager.h'
 ```
 
-**注意：** `prepare_command` 在使用 `:path` 本地引用时不会执行。本地开发时需手动执行一次复制，或直接在 `Classes/` 目录中开发后同步回 `darwin/Classes/`。
+**目录结构说明：** `macos/Classes/` 在 `prepare_command` 运行后包含：
+- `xlog_flutter.c` — macOS 编译占位文件（保留在 `macos/Classes/`，不覆盖）
+- `XLog*.h/.m` — 从 `darwin/Classes/` 复制的共享代码
+
+**本地开发工作流：** `prepare_command` 在使用 `:path` 本地引用时不会执行。
+
+**推荐工作流：** 始终编辑 `darwin/Classes/` 下的源文件（作为唯一真实源），然后手动执行：
+```bash
+cp -r darwin/Classes/* ios/Classes/
+cp -r darwin/Classes/* macos/Classes/
+```
+
+或在 CI/Pod 发布时由自动化脚本执行。这样保证源代码在 `darwin/` 中是单一权威。
 
 ---
 
@@ -275,17 +292,34 @@ macOS 使用相同代码，仅 `logdir` 路径可替换为 `NSApplicationSupport
 
 ## 6. 实现注意事项
 
-### 6.1 C API 字符串处理
+### 6.1 配置字段验证
+
+`XLogManager.openWithConfig:level:` 实现需要：
+1. 验证 `config.logdir` 和 `config.nameprefix` 均不为 `nil` 或空字符串，否则返回 `nil` 并记录错误
+2. 捕获 `xlog_new_instance` 返回 0（失败）的情况，返回 `nil`
+3. 根据需要发送 assertion 或日志
+
+### 6.2 C API 字符串处理
 
 `xlog_capi.h` 的函数参数均为 `const char *`，实现中需要注意：
 - `NSString` → `const char *`：使用 `[str UTF8String]`，生命周期由 `NSString` 持有
 - `xlog_get_log_path` 等返回 `const char *` 的函数：用 `[NSString stringWithUTF8String:]` 转换，允许返回 `nil`
 
-### 6.2 XLogInstance 内部 handle
+### 6.3 xlog_write 参数映射
+
+C API `xlog_write` 接受 `filename`、`funcname`、`line` 等源代码位置信息。ObjC 的便捷方法（`verbose:tag:msg:` 等）为了简化 API，不暴露这些参数，而是传递 `NULL`/空值。
+
+如果用户需要指定源代码位置，可使用通用的 `write:tag:msg:` 方法并在 `msg` 中编码位置信息，或直接调用 C API。
+
+### 6.4 xlog_level_t 完整性
+
+C API 定义了 `XLOG_LEVEL_ALL = 0`（`XLOG_LEVEL_VERBOSE` 的别名），ObjC 枚举中故意省略 `XLogLevelAll`。开发者应使用 `XLogLevelVerbose`。
+
+### 6.5 XLogInstance 内部 handle
 
 `XLogInstance` 持有 `xlog_handle_t`（`void *`），不对外暴露。通过 `isValid` 属性判断是否有效，避免空指针调用。
 
-### 6.3 iOS 与 macOS 的库加载差异
+### 6.6 iOS 与 macOS 的库加载差异
 
 封装层本身（ObjC 代码）对两个平台完全一致，平台差异由各自 podspec 处理：
 - iOS：静态 Framework（`xlog.framework`），符号通过 `xlog_symbols.c` 强制链接
@@ -293,7 +327,7 @@ macOS 使用相同代码，仅 `logdir` 路径可替换为 `NSApplicationSupport
 
 ObjC 封装层直接调用 C 函数，无需关心加载方式。
 
-### 6.4 线程安全
+### 6.7 线程安全
 
 ObjC 封装层不额外增加线程锁，线程安全由底层 C 库负责（xlog 本身是线程安全的）。
 
