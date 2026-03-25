@@ -14,7 +14,16 @@ Universal Static Framework covering iOS device (arm64) and simulator (x86_64).
   s.author           = { 'Tencent' => 'mars@tencent.com' }
 
   s.source           = { :path => '.' }
-  s.source_files     = 'Classes/**/*'
+
+  s.prepare_command = <<-CMD
+    cp -r ../darwin/Classes/* Classes/ 2>/dev/null || true
+  CMD
+
+  s.source_files = 'Classes/**/*.{h,m,c}'
+  s.public_header_files = 'Classes/XLog.h',
+                          'Classes/XLogConfig.h',
+                          'Classes/XLogInstance.h',
+                          'Classes/XLogManager.h'
 
   # Prebuilt Universal Static Framework (device arm64 + simulator x86_64).
   # Build it first with: python mars/xlog/build_ios.py --config Release
@@ -33,6 +42,7 @@ Universal Static Framework covering iOS device (arm64) and simulator (x86_64).
   s.pod_target_xcconfig = {
     'DEFINES_MODULE'                        => 'YES',
     'EXCLUDED_ARCHS[sdk=iphonesimulator*]'  => 'i386',
+    'HEADER_SEARCH_PATHS'                   => '"$(PODS_TARGET_SRCROOT)/../include"',
   }
   s.swift_version = '5.0'
 end

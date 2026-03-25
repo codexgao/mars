@@ -17,8 +17,16 @@ Build with: python3 mars/xlog/build_macos.py --config Release
 
   s.source           = { :path => '.' }
 
+  s.prepare_command = <<-CMD
+    cp -r ../darwin/Classes/* Classes/ 2>/dev/null || true
+  CMD
+
   # Classes/ contains a forwarder xlog_flutter.c — required by Flutter FFI plugin structure.
-  s.source_files = 'Classes/**/*'
+  s.source_files = 'Classes/**/*.{h,m,c}'
+  s.public_header_files = 'Classes/XLog.h',
+                          'Classes/XLogConfig.h',
+                          'Classes/XLogInstance.h',
+                          'Classes/XLogManager.h'
 
   # Prebuilt libxlog.dylib (Universal Binary: arm64 + x86_64).
   # Build with: python3 mars/xlog/build_macos.py --config Release
@@ -30,7 +38,8 @@ Build with: python3 mars/xlog/build_macos.py --config Release
   s.platform = :osx, '10.13'
   s.pod_target_xcconfig = {
     'DEFINES_MODULE' => 'YES',
-    'LD_RUNPATH_SEARCH_PATHS' => '$(inherited) @loader_path/Frameworks'
+    'LD_RUNPATH_SEARCH_PATHS' => '$(inherited) @loader_path/Frameworks',
+    'HEADER_SEARCH_PATHS' => '"$(PODS_TARGET_SRCROOT)/../include"',
   }
   s.swift_version = '5.0'
 end
