@@ -168,13 +168,26 @@ cmake <build_dir> \
 ```
 output_dir/
 ├── Release/
-│   └── libxlog.dylib     ← Universal Binary (arm64 + x86_64)
-├── Debug/
-│   └── libxlog.dylib
-└── include/              ← 导出的头文件（来自 XLOG_COPY_HEADER_FILES）
-    ├── comm/
-    └── xlog/
-        └── xlog_capi.h
+│   └── libxlog.dylib     ← Universal Binary (arm64 + x86_64)，需提交到 git
+└── Debug/
+    └── libxlog.dylib
+```
+
+**不需要 copy_headers() 步骤**：
+- Dart FFI 层通过 `DynamicLibrary.open` 按符号名加载，运行时不需要头文件
+- 重新生成 FFI 绑定（ffigen）时用的是 `samples/xlog_flutter/include/xlog/xlog_capi.h`，该文件已存在于插件中，无需构建脚本复制
+- `XLOG_COPY_HEADER_FILES` 中的其他头文件（`appender.h`、`xlogger.h` 等）是 C++ 内部头文件，只在源码编译时需要，预编译库分发时不需要
+
+### 6.5 产物提交 git
+
+构建脚本输出的 `libxlog.dylib` 需要提交到 git（与 Windows 的 `windows/libs/xlog.dll` 相同），原因：
+
+- 插件发布时需要携带预编译二进制，消费者无需本地编译 xlog
+- Flutter pub 发布包含二进制文件
+
+确保 `.gitattributes` 将 `*.dylib` 按二进制文件追踪：
+```
+*.dylib binary
 ```
 
 ---
