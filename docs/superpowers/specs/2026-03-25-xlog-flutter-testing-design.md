@@ -63,10 +63,36 @@ xlog_flutter/
 
 ### 4.1 测试基础设施
 
+#### 4.1.1 共享测试工具类
+
+创建 `example/integration_test/test_utils.dart`，提供通用 setup/teardown 和临时目录管理：
+
+```dart
+import 'dart:io';
+import 'package:path_provider/path_provider.dart';
+
+class XlogTestUtils {
+  static late Directory tempLogDir;
+  
+  static Future<void> setUp() async {
+    tempLogDir = await getTemporaryDirectory();
+  }
+  
+  static Future<void> tearDown(String nameprefix) async {
+    XLog.release(nameprefix);
+    if (tempLogDir.existsSync()) {
+      await tempLogDir.delete(recursive: true);
+    }
+  }
+}
+```
+
+#### 4.1.2 测试编写规范
+
 - 使用 `package:integration_test/integration_test.dart`
-- 每个测试前创建临时目录作为 `logdir`，测试后清理
-- 统一 `nameprefix` 命名规范，避免实例名冲突
-- `tearDown` 确保每个测试后调用 `XLog.release()` 清理实例
+- 每个测试文件在 `setUpAll()` 初始化临时目录，`tearDown()` 中调用 `XlogTestUtils.tearDown()`
+- 统一 `nameprefix` 命名规范：`test_instance_${test_name}_${timestamp}`，避免实例名冲突
+- 每个测试用例必须独立 `open()` 一个实例，测试结束前 `release()`
 
 ### 4.2 `xlog_open_test.dart` — 实例生命周期
 
@@ -79,7 +105,7 @@ xlog_flutter/
 | `release()` 后 `has()` 返回 false | `XLog.has(name) == false` |
 | `destroy()` 通过 handle 销毁 | 实例随后不可用 |
 | `release()` 不存在的名字 | 不崩溃 |
-| 未初始化时调用 `get()` | 返回 null 或抛出异常 |
+| 未初始化时调用 `get()` | 返回 `handle == 0` 的无效实例（`isValid == false`） |
 | `isInitialized` 在 `initialize()` 后为 true | 标志位正确 |
 
 ### 4.3 `xlog_write_test.dart` — 写日志
@@ -96,14 +122,14 @@ xlog_flutter/
 | 带 `filename` 参数写入 | 不崩溃 |
 | 带 `funcname` 参数写入 | 不崩溃 |
 | 带 `line` 参数写入 | 不崩溃 |
-| 写入后 `logPath` 非空 | 路径字符串有效 |
-| `flush(sync: true)` 后文件 size > 0 | 数据已落盘 |
+| 写入后 `logPath` 非空 | 路径包含 nameprefix，文件系统中文件存在 |
+| `flush(sync: true)` 后文件 size > 0 | 文件 size >= 50 字节（含日志元数据） |
 | `flush(sync: false)` | 不崩溃 |
 | `flushAll()` | 不崩溃 |
-| `XLogConfig.compressMode = zlib` | 文件正常生成 |
-| `XLogConfig.compressMode = zstd` | 文件正常生成 |
-| `XLogConfig.pubKey` 加密开启 | 文件正常生成 |
-| `XLogConfig.cachedir` 指定独立缓存目录 | 不崩溃 |
+| `XLogConfig.compressMode = zlib` | 文件生成，检查 zlib magic bytes (0x78, 0x9C) |
+| `XLogConfig.compressMode = zstd` | 文件生成，检查 zstd magic bytes (0x28, 0xB5, 0x2F, 0xFD) |
+| `XLogConfig.pubKey` 加密开启 | 文件加密，size > 100，文件头不为可读 ASCII 文本 |
+| `XLogConfig.cachedir` 指定独立缓存目录 | 不崩溃，缓存生成在指定目录 |
 | `XLogConfig.cacheDays` 设置 | 不崩溃 |
 
 ### 4.4 `xlog_level_test.dart` — 级别控制
@@ -134,9 +160,11 @@ xlog_flutter/
 
 | 用例 | 验证点 |
 |------|--------|
-| 同时开两个实例写入 | 两个实例各自 `logPath` 不同 |
-| 两实例互不干扰 | release 一个，另一个仍 `isValid` |
-| `flushAll()` 刷新所有实例 | 不崩溃 |
+| 同时开两个实例写入 | 两个实例各自 `logPath` 完全不同，each logs 单独文件集 |
+| 两实例级别独立 | 修改 instance1 的 level 不影响 instance2 的 level |
+| 两实例 appender 独立 | 设置 instance1 为 sync，instance2 为 async，各自表现正确 |
+| 两实例互不干扰 | release 一个，另一个仍 `isValid == true` 且日志写入正常 |
+| `flushAll()` 刷新所有实例 | 不崩溃，两个实例日志都被 flush |
 | 分别 `release()` 各实例 | 均释放后 `has()` 均返回 false |
 
 ---
@@ -180,7 +208,8 @@ xcodebuild test \
 
 ### 5.2 Android JUnit Instrumented Test
 
-**文件位置：** `example/android/app/src/androidTest/.../XlogNativeTest.kt`
+**文件位置：** `example/android/app/src/androidTest/java/com/codexgao/xlog_flutter_example/XlogNativeTest.kt`  
+（扩展或替代现有 `XlogNativeInstrumentedTest.kt`）
 
 **测试通过 JNA 直接调用 C API（与 Dart FFI 同层）：**
 
@@ -207,26 +236,158 @@ cd example/android
 
 ### 5.3 Windows / Linux（暂缓验证）
 
-测试代码结构与 Android JNA 类似，直接调用 C API，覆盖相同用例集。代码写好后标注 `// TODO: verify on target platform`，不纳入当前验收范围。
+**测试框架：** C API 直接调用（结构同 Android JNA）
+
+**文件位置：**
+- Windows：`example/windows/runner/xlog_native_test.cpp`
+- Linux：`example/linux/runner/xlog_native_test.cpp`
+
+**用例表：** 与 Section 5.2 相同，用 C++ 或纯 C 调用 xlog C API，覆盖所有函数。
+
+**状态标记：** 代码编写完毕后标注 `// TODO: verify on target platform`，当前不在验收范围内。
+
+---
+
+### 5.4 平台特定设置
+
+#### macOS
+- dylib 必须带有有效代码签名或关闭 SIP（`xcode-select --switch`）
+- 临时目录需要写权限（通常 `/tmp`、`~/Library/Caches`）
+
+#### iOS
+- FFI 通过 `DynamicLibrary.process()` 加载 `xlog.framework` 需要 bitcode 兼容（iOS 14.0+）
+- 临时目录受 App Sandbox 限制，应使用 `getApplicationDocumentsDirectory()` 而非系统 `/tmp`
+
+#### Android
+- 验证 `build.gradle` 中 `abiFilters` 包含测试架构（通常 `arm64-v8a` 优先）
+- NDK 架构：测试运行的 Emulator 必须与 `.so` 库架构匹配（如 arm64-v8a Emulator 不能用 x86 库）
+
+#### Linux
+- `/tmp` 可能被定期清理，应使用 `$XDG_RUNTIME_DIR` 或显式创建持久化临时目录
+- 权限：`libxlog.so` 必须在 `LD_LIBRARY_PATH` 或 runner 应用所在目录
 
 ---
 
 ## 6. 依赖变更
 
-`example/pubspec.yaml` 需添加：
+### 6.1 `example/pubspec.yaml`
+
 ```yaml
 dev_dependencies:
   integration_test:
     sdk: flutter
+  flutter_test:
+    sdk: flutter
+  path_provider: ^2.1.0          # 用于 getTemporaryDirectory()
 ```
+
+### 6.2 iOS Podspec（验证配置）
+
+确保 `example/ios/Podfile` 和 `xlog_flutter.podspec` 中使用正确的 rpath 配置：
+
+```ruby
+# ✓ 正确
+pod_target_xcconfig = {
+  'LD_RUNPATH_SEARCH_PATHS' => '@loader_path/Frameworks'
+}
+
+# ✗ 错误（不使用）
+pod_target_xcconfig = {
+  'OTHER_LDFLAGS' => '-rpath @loader_path/Frameworks'
+}
+```
+
+### 6.3 Android Build Setup
+
+验证 `example/android/build.gradle` 和 `app/build.gradle`：
+- NDK 已安装（`~/Library/Android/sdk/ndk/`）
+- `minSdkVersion >= 21`（xlog_flutter 要求）
+- `abiFilters` 包含 ARM64（推荐：`arm64-v8a`）
 
 ---
 
 ## 7. 验收标准
 
-- [ ] Flutter 集成测试在 macOS、iOS Simulator、Android Emulator 上全部通过
-- [ ] macOS XCTest 全部通过
-- [ ] iOS XCTest 全部通过
-- [ ] Android JUnit Instrumented Test 全部通过
-- [ ] Windows / Linux 测试代码已写好（暂不要求通过）
-- [ ] 每个测试用例在 tearDown 中清理临时文件和实例
+- [ ] Flutter 集成测试在 macOS、iOS Simulator、Android Emulator 上全部通过（总耗时 < 5 min）
+- [ ] macOS XCTest 全部通过（< 1 min）
+- [ ] iOS XCTest 全部通过（< 2 min）
+- [ ] Android JUnit Instrumented Test 全部通过（< 2 min）
+- [ ] 测试代码覆盖 Dart/ObjC/JNA/C API 所有公开方法
+- [ ] 所有测试日志保存到 `test_output/` 目录：
+  - Flutter 集成测试 JSON 报告（`flutter test --reporter=json`）
+  - XCTest 结果（`xcresult`）
+  - Android Test XML 报告（JUnit XML）
+- [ ] 每个测试用例在 `tearDown` 中正确清理临时文件和实例
+- [ ] Windows / Linux 测试代码已编写（标注 TODO，暂不要求通过）
+
+---
+
+## 8. 测试运行指南
+
+### 8.1 Flutter 集成测试
+
+```bash
+cd example
+
+# macOS
+flutter test integration_test/ -d macos
+
+# iOS Simulator（需先启动模拟器）
+open -a Simulator
+flutter test integration_test/ -d ios
+
+# Android Emulator（需先启动模拟器）
+cd ../..
+$ANDROID_HOME/emulator/emulator -avd Pixel_4_API_30 &
+cd example
+flutter test integration_test/ -d android
+```
+
+### 8.2 macOS XCTest
+
+```bash
+cd example
+flutter pub get
+
+xcodebuild test \
+  -workspace macos/Runner.xcworkspace \
+  -scheme Runner \
+  -destination 'platform=macOS' \
+  -resultBundlePath macos/test_result.xcresult
+```
+
+### 8.3 iOS XCTest
+
+```bash
+cd example
+flutter pub get
+
+# 确保 CocoaPods 依赖已安装
+cd ios
+pod install --repo-update
+cd ../..
+
+# 列出可用模拟器
+xcrun simctl list devices
+
+xcodebuild test \
+  -workspace example/ios/Runner.xcworkspace \
+  -scheme Runner \
+  -destination 'platform=iOS Simulator,name=iPhone 15,OS=18.2' \
+  -resultBundlePath example/ios/test_result.xcresult
+```
+
+### 8.4 Android JUnit Instrumented Test
+
+```bash
+cd example/android
+
+# 启动 emulator（需 Android SDK 已安装）
+$ANDROID_HOME/emulator/emulator -avd Pixel_4_API_30 &
+
+# 运行测试
+./gradlew connectedAndroidTest -x lint
+
+# 测试报告位置
+# build/outputs/androidTest-results/connected/
+```
