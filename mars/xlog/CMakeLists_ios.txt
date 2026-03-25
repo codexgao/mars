@@ -1,4 +1,8 @@
 cmake_minimum_required(VERSION 3.10)
+
+# ---- Deployment target (must be set before project() to propagate to iOS toolchain) ----
+set(CMAKE_OSX_DEPLOYMENT_TARGET "12.0" CACHE STRING "" FORCE)
+
 project(xlog_ios_build)
 
 set(CMAKE_INSTALL_PREFIX "${CMAKE_BINARY_DIR}" CACHE PATH "Installation directory" FORCE)
@@ -10,9 +14,6 @@ if(NOT DEFINED XLOG_SOURCE_DIR)
 endif()
 get_filename_component(MARS_ROOT "${XLOG_SOURCE_DIR}/.." ABSOLUTE)
 set(XLOG_ROOT "${XLOG_SOURCE_DIR}")
-
-# ---- Deployment target (must be set before project() takes effect for toolchain) ----
-set(CMAKE_OSX_DEPLOYMENT_TARGET "12.0" CACHE STRING "" FORCE)
 
 # ---- C++ standard ----
 set(CMAKE_CXX_STANDARD 14)
@@ -30,7 +31,7 @@ include_directories(${MARS_ROOT}/comm/xlogger)
 include_directories(${MARS_ROOT}/crypt)
 include_directories(${MARS_ROOT}/crypt/micro-ecc-master)
 
-# ---- Dependencies: comm / boost / zstd (statically linked) ----
+# ---- Dependencies: comm / boost / zstd (statically linked into .a) ----
 add_subdirectory(${MARS_ROOT}/comm ${CMAKE_BINARY_DIR}/comm)
 add_subdirectory(${MARS_ROOT}/boost ${CMAKE_BINARY_DIR}/boost)
 
@@ -42,6 +43,7 @@ include(GNUInstallDirs)
 add_subdirectory(${MARS_ROOT}/zstd/build/cmake/lib ${CMAKE_BINARY_DIR}/zstd)
 
 # ---- xlog source files ----
+
 file(GLOB XLOG_SRC_FILES
     ${XLOG_ROOT}/src/*.cc
     ${XLOG_ROOT}/src/*.h
