@@ -38,3 +38,11 @@ build/
 # not build artifacts. The root rule "*.xcodeproj" would otherwise exclude them.
 !example/ios/Runner.xcodeproj/
 !example/macos/Runner.xcodeproj/
+
+# macos/Classes and ios/Classes contain ObjC files copied from darwin/Classes
+# by `prepare_command` in the podspec. Only darwin/Classes is the source of truth.
+# Platform-specific .c files (xlog_flutter.c, xlog_symbols.c) are NOT ignored.
+macos/Classes/XLog*.h
+macos/Classes/XLog*.m
+ios/Classes/XLog*.h
+ios/Classes/XLog*.m
