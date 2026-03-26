@@ -92,9 +92,10 @@ void main() {
       );
       final instance = XLog.open(config);
 
-      final levels = [
-        XLogLevel.all,
-        XLogLevel.verbose,
+      // Note: XLOG_LEVEL_ALL and XLOG_LEVEL_VERBOSE share the same native value (0).
+      // Round-tripping through native layer returns XLogLevel.all for both.
+      // Verify settable levels that have distinct native values:
+      final uniqueLevels = [
         XLogLevel.debug,
         XLogLevel.info,
         XLogLevel.warn,
@@ -103,10 +104,14 @@ void main() {
         XLogLevel.none,
       ];
 
-      for (final level in levels) {
+      for (final level in uniqueLevels) {
         instance.level = level;
         expect(instance.level, equals(level));
       }
+
+      // For all/verbose (both map to native 0), just verify no crash:
+      instance.level = XLogLevel.all;
+      instance.level = XLogLevel.verbose;
     });
   });
 }
