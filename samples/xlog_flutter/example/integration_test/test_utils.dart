@@ -61,6 +61,7 @@ class XlogTestUtils {
   /// 获取实例的日志文件列表
   static Future<List<File>> getLogFiles(XLogInstance instance) async {
     final logPath = instance.logPath;
+    if (logPath == null) return [];
     final logDir = Directory(logPath);
     
     if (!await logDir.exists()) return [];
