@@ -37,13 +37,26 @@ fvm flutter test integration_test/ -d emulator-5554
 
 ### macOS Native Tests (XCTest)
 
+First build the Flutter app (generates the test host binary):
+
+```bash
+cd samples/xlog_flutter/example
+fvm flutter build macos --debug
+```
+
+Then run XCTest:
+
 ```bash
 cd samples/xlog_flutter/example/macos
+SYMROOT="$(pwd)/../build/macos/Build/Products"
 xcodebuild test \
-  -project Runner.xcodeproj \
+  -workspace Runner.xcworkspace \
   -scheme Runner \
   -configuration Debug \
-  -destination 'platform=macOS'
+  -destination 'platform=macOS,arch=arm64' \
+  -only-testing RunnerTests \
+  SYMROOT="$SYMROOT" \
+  OBJROOT="$SYMROOT/../Intermediates.noindex"
 ```
 
 Or open `macos/Runner.xcworkspace` in Xcode and run the `RunnerTests` target (⌘U).
