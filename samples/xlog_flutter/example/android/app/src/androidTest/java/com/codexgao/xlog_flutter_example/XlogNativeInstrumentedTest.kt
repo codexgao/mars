@@ -3,6 +3,8 @@ package com.codexgao.xlog_flutter_example
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import com.codexgao.xlog_flutter.XLog
+import com.codexgao.xlog_flutter.XLogAppenderMode
+import com.codexgao.xlog_flutter.XLogCompressMode
 import com.codexgao.xlog_flutter.XLogConfig
 import com.codexgao.xlog_flutter.XLogLevel
 import org.junit.Assert.*
@@ -158,6 +160,179 @@ class XlogNativeInstrumentedTest {
         // Cleanup
         XLog.releaseInstance("instance1")
         XLog.releaseInstance("instance2")
+    }
+
+    @Test
+    fun setLevel_andGetLevel_matchRoundtrip() {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val logDir = File(context.filesDir, "xlog_test/setlevel_${System.currentTimeMillis()}").apply { mkdirs() }
+
+        val config = XLogConfig(logDir.absolutePath, "setlevel_test")
+        val handle = XLog.newInstance(config, XLogLevel.DEBUG)
+        assertTrue("Handle should be valid", handle != 0L)
+
+        // Set each level and verify getLevel returns the same
+        for (level in listOf(XLogLevel.VERBOSE, XLogLevel.INFO, XLogLevel.ERROR, XLogLevel.NONE)) {
+            XLog.setLevel(handle, level)
+            assertEquals("getLevel should return $level after setLevel", level, XLog.getLevel(handle))
+        }
+
+        // Cleanup
+        XLog.releaseInstance("setlevel_test")
+    }
+
+    @Test
+    fun setAppenderMode_sync_doesNotCrash() {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val logDir = File(context.filesDir, "xlog_test/appmode_${System.currentTimeMillis()}").apply { mkdirs() }
+
+        val config = XLogConfig(logDir.absolutePath, "appmode_test")
+        val handle = XLog.newInstance(config, XLogLevel.DEBUG)
+        assertTrue("Handle should be valid", handle != 0L)
+
+        // Switch to sync mode — must not throw
+        XLog.setAppenderMode(handle, XLogAppenderMode.SYNC)
+        XLog.i(handle, "TestTag", "Message in sync mode")
+
+        // Switch back to async mode — must not throw
+        XLog.setAppenderMode(handle, XLogAppenderMode.ASYNC)
+        XLog.i(handle, "TestTag", "Message in async mode")
+
+        XLog.flush(handle, sync = true)
+
+        // Cleanup
+        XLog.releaseInstance("appmode_test")
+    }
+
+    @Test
+    fun setConsoleLogOpen_trueAndFalse_doesNotCrash() {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val logDir = File(context.filesDir, "xlog_test/console_${System.currentTimeMillis()}").apply { mkdirs() }
+
+        val config = XLogConfig(logDir.absolutePath, "console_test")
+        val handle = XLog.newInstance(config, XLogLevel.DEBUG)
+        assertTrue("Handle should be valid", handle != 0L)
+
+        // Enable console log — must not throw
+        XLog.setConsoleLogOpen(handle, true)
+        XLog.i(handle, "TestTag", "Message with console open")
+
+        // Disable console log — must not throw
+        XLog.setConsoleLogOpen(handle, false)
+        XLog.i(handle, "TestTag", "Message with console closed")
+
+        XLog.flush(handle, sync = true)
+
+        // Cleanup
+        XLog.releaseInstance("console_test")
+    }
+
+    @Test
+    fun flush_async_doesNotCrash() {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val logDir = File(context.filesDir, "xlog_test/flush_async_${System.currentTimeMillis()}").apply { mkdirs() }
+
+        val config = XLogConfig(logDir.absolutePath, "flush_async_test")
+        val handle = XLog.newInstance(config, XLogLevel.DEBUG)
+        assertTrue("Handle should be valid", handle != 0L)
+
+        XLog.i(handle, "TestTag", "Message before async flush")
+
+        // Asynchronous flush — must not throw
+        XLog.flush(handle, sync = false)
+
+        // Give the async flush a moment then do a sync flush to ensure data is written
+        Thread.sleep(200)
+        XLog.flush(handle, sync = true)
+
+        // Cleanup
+        XLog.releaseInstance("flush_async_test")
+    }
+
+    @Test
+    fun flushAll_async_doesNotCrash() {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val logDir = File(context.filesDir, "xlog_test/flushall_async_${System.currentTimeMillis()}").apply { mkdirs() }
+
+        val config = XLogConfig(logDir.absolutePath, "flushall_async_test")
+        val handle = XLog.newInstance(config, XLogLevel.DEBUG)
+        assertTrue("Handle should be valid", handle != 0L)
+
+        XLog.i(handle, "TestTag", "Message before flushAll async")
+
+        // Asynchronous flushAll — must not throw
+        XLog.flushAll(sync = false)
+
+        // Give the async flush a moment then do a sync flushAll to ensure data is written
+        Thread.sleep(200)
+        XLog.flushAll(sync = true)
+
+        // Cleanup
+        XLog.releaseInstance("flushall_async_test")
+    }
+
+    @Test
+    fun getLogPath_containsNameprefix() {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val nameprefix = "prefixcheck_test"
+        val logDir = File(context.filesDir, "xlog_test/prefixcheck_${System.currentTimeMillis()}").apply { mkdirs() }
+
+        val config = XLogConfig(logDir.absolutePath, nameprefix)
+        val handle = XLog.newInstance(config, XLogLevel.DEBUG)
+        assertTrue("Handle should be valid", handle != 0L)
+
+        // Write and flush to ensure a log file is created
+        XLog.i(handle, "TestTag", "Message for path check")
+        XLog.flush(handle, sync = true)
+
+        val path = XLog.getLogPath(handle)
+        assertNotNull("Log path should not be null", path)
+        assertTrue("Log path should contain nameprefix '$nameprefix'", path!!.contains(nameprefix))
+
+        // Cleanup
+        XLog.releaseInstance(nameprefix)
+    }
+
+    @Test
+    fun zstdCompression_fileCreated() {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val logDir = File(context.filesDir, "xlog_test/zstd_${System.currentTimeMillis()}").apply { mkdirs() }
+
+        val config = XLogConfig(logDir.absolutePath, "zstd_test").apply {
+            compress_mode = XLogCompressMode.ZSTD.value
+        }
+        val handle = XLog.newInstance(config, XLogLevel.DEBUG)
+        assertTrue("Handle should be valid", handle != 0L)
+
+        // Write several messages to trigger a file flush
+        repeat(5) { i ->
+            XLog.i(handle, "TestTag", "Zstd test message #$i")
+        }
+        XLog.flush(handle, sync = true)
+
+        // At least one log file must have been created in the log directory
+        val files = logDir.listFiles { f -> f.isFile && f.length() > 0 }
+        assertNotNull("Log directory file listing should not be null", files)
+        assertTrue("At least one non-empty log file should be created with zstd compression", files!!.isNotEmpty())
+
+        // Cleanup
+        XLog.releaseInstance("zstd_test")
+    }
+
+    @Test
+    fun destroyInstance_doesNotCrash() {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val logDir = File(context.filesDir, "xlog_test/destroy_${System.currentTimeMillis()}").apply { mkdirs() }
+
+        val config = XLogConfig(logDir.absolutePath, "destroy_test")
+        val handle = XLog.newInstance(config, XLogLevel.DEBUG)
+        assertTrue("Handle should be valid", handle != 0L)
+
+        XLog.i(handle, "TestTag", "Message before destroyInstance")
+        XLog.flush(handle, sync = true)
+
+        // destroyInstance via handle — must not throw
+        XLog.destroyInstance(handle)
     }
 
     // ==================== Helper Methods ====================
