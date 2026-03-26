@@ -33,3 +33,8 @@ build/
 !windows/libs/*.dll
 !windows/libs/*.lib
 !windows/libs/*.pdb
+
+# Override root .gitignore: Flutter example Xcode projects are source files,
+# not build artifacts. The root rule "*.xcodeproj" would otherwise exclude them.
+!example/ios/Runner.xcodeproj/
+!example/macos/Runner.xcodeproj/
