@@ -33,6 +33,10 @@
     return _handle;
 }
 
+- (void)_invalidate {
+    _handle = 0;
+}
+
 // MARK: - Properties
 
 - (BOOL)isValid {

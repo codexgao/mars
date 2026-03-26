@@ -155,7 +155,7 @@ class XlogNativeMacOSTests: XCTestCase {
         XLogManager.releaseInstance(withName: "t8")
     }
 
-    // MARK: - Test 9: destroyInstance invalidates the object
+    // MARK: - Test 9: destroy invalidates the object
 
     func testDestroyInstanceInvalidatesIt() {
         let dir = tempLogDir(name: "destroy")
@@ -165,8 +165,8 @@ class XlogNativeMacOSTests: XCTestCase {
             return
         }
         XCTAssertTrue(inst.isValid)
-        XLogManager.destroyInstance(inst)
-        XCTAssertFalse(inst.isValid, "Instance should be invalid after destroyInstance")
+        XLogManager.destroy(inst)
+        XCTAssertFalse(inst.isValid, "Instance should be invalid after destroy")
     }
 
     // MARK: - Test 10: isEnabledFor reflects current level

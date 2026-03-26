@@ -101,6 +101,9 @@ typedef NS_ENUM(NSInteger, XLogCompressMode) {
 @interface XLogInstance (Internal)
 - (instancetype)initWithHandle:(uintptr_t)handle;
 - (uintptr_t)_xlog_handle;
+/// Zeroes the internal handle, marking this instance as invalid.
+/// Called by XLogManager after destroying the native resource.
+- (void)_invalidate;
 @end
 
 NS_ASSUME_NONNULL_END

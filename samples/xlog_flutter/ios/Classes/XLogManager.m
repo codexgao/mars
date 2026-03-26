@@ -66,6 +66,7 @@
 + (void)destroyInstance:(XLogInstance *)instance {
     if (!instance || !instance.isValid) return;
     xlog_destroy_instance([instance _xlog_handle]);
+    [instance _invalidate];
 }
 
 + (void)flushAll {
