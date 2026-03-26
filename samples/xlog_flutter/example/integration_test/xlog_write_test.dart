@@ -138,7 +138,7 @@ void main() {
       expect(files, isNotEmpty);
     });
 
-    test('logPath is non-empty and contains nameprefix', () async {
+    test('logPath is non-empty and contains log files', () async {
       final config = XLogConfig(
         logdir: tempLogDir.path,
         nameprefix: 'test_write_instance',
@@ -148,7 +148,23 @@ void main() {
       final logPath = instance.logPath;
       expect(logPath, isNotNull);
       expect(logPath, isNotEmpty);
-      expect(logPath, contains('test_write_instance'));
+      
+      // Write and flush to ensure log file is created
+      instance.info('tag', 'test message');
+      instance.flush(sync: true);
+      
+      // Verify log files are created in logPath directory
+      final logDir = Directory(logPath!);
+      expect(await logDir.exists(), isTrue);
+      
+      final files = await XlogTestUtils.getLogFiles(instance);
+      expect(files, isNotEmpty, reason: 'Log files should exist in logPath');
+      
+      // Verify at least one file has the nameprefix
+      final hasNameprefixFile = files.any((f) => 
+        f.path.contains('test_write_instance'));
+      expect(hasNameprefixFile, isTrue, 
+        reason: 'At least one log file should contain the nameprefix');
     });
 
     test('flush(sync: true) increases file size', () async {

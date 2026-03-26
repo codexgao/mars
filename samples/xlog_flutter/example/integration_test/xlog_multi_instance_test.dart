@@ -20,7 +20,7 @@ void main() {
   });
 
   group('XLog Multi-Instance', () {
-    test('two instances have different logPath', () async {
+    test('two instances share same logPath but have separate files', () async {
       final config1 = XLogConfig(
         logdir: tempLogDir.path,
         nameprefix: 'test_multi_1',
@@ -37,7 +37,27 @@ void main() {
       expect(instance2.logPath, isNotNull);
       expect(instance1.logPath, isNotEmpty);
       expect(instance2.logPath, isNotEmpty);
-      expect(instance1.logPath, isNot(equals(instance2.logPath)));
+      
+      // Both instances should share the same logPath (logdir)
+      expect(instance1.logPath, equals(instance2.logPath));
+      
+      // Write to both instances
+      instance1.info('tag', 'message from instance 1');
+      instance1.flush(sync: true);
+      
+      instance2.info('tag', 'message from instance 2');
+      instance2.flush(sync: true);
+      
+      // But their log files should be separate (different nameprefix)
+      final files1 = await XlogTestUtils.getLogFiles(instance1);
+      final files2 = await XlogTestUtils.getLogFiles(instance2);
+      
+      expect(files1, isNotEmpty);
+      expect(files2, isNotEmpty);
+      
+      // Verify each instance's files contain its nameprefix
+      expect(files1.any((f) => f.path.contains('test_multi_1')), isTrue);
+      expect(files2.any((f) => f.path.contains('test_multi_2')), isTrue);
     });
 
     test('instance levels are independent', () async {
